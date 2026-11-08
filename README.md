@@ -27,6 +27,31 @@ Set package.json `prettier` to `@releaseready/code-quality/prettier`. In lint-st
 Copy the pinned quality.ignore into the consumer root and refresh it on upgrades: Prettier resolves paths relative to that file, so never point into node_modules.
 Copy hooks/pre-commit to .husky/pre-commit and run local Husky setup. Preserve any existing prepare/build behavior; a consumer without a build step can use `husky` alone.
 
+## Git installation for staged path checks
+
+The staged filename guard invokes system Git by absolute path, never through the
+inherited PATH (which hooks can prepend with repository-owned executables).
+Install Git in an administrator-managed location: `/usr/bin/git` on macOS/Linux
+and other POSIX hosts, `/usr/local/bin/git` on FreeBSD, or
+`C:\Program Files\Git\cmd\git.exe` for a machine-wide Git for Windows installation.
+These locations and their parent directories must not be writable by untrusted users.
+Custom installations (including NixOS, per-user Git and non-C Windows drives)
+must explicitly set `CODE_QUALITY_GIT_EXECUTABLE` to their trusted absolute Git
+executable path before running the guard. For example, use the installed
+`/nix/store/.../bin/git` path on NixOS or `D:\Program Files\Git\cmd\git.exe`
+on Windows. Empty, relative, NUL-containing and Windows network paths are rejected.
+This is a behavior change: Git available only through PATH is no longer selected.
+A missing or failing configured executable stops checks without trying another Git.
+
+The override is trusted user configuration, not a way to accept repository or
+third-party input. It does not validate file ownership or ACLs. Set it only in your
+trusted development environment, pointing to an installation you trust, and do
+not import the value from an untrusted project. This change protects direct Git
+executable selection from PATH shadowing, not the entire inherited environment
+(such as Node loader or Git configuration variables).
+The package does not configure Git installations or permissions. Other tools and
+hooks retain their existing behavior and are not a security boundary.
+
 ## Commit behavior
 
 Formatting writes only through the explicit format command. Review and stage that diff yourself; hooks check without --fix. Format and format:check cover the same scope. Both CLI and staged checks honor EditorConfig, with explicit Prettier options taking precedence.

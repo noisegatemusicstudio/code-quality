@@ -10,6 +10,8 @@ import {
   copyFileSync,
   rmSync,
   unlinkSync,
+  chmodSync,
+  existsSync,
 } from 'node:fs';
 import { dirname, join, resolve } from 'node:path';
 import { spawnSync } from 'node:child_process';
@@ -403,4 +405,131 @@ await test('Given EditorConfig indentation, when CLI-formatted code is staged, t
       'When explicit Prettier options override EditorConfig',
     ]);
   });
+});
+
+await test('Given a poisoned PATH, the filename guard uses system Git and preserves staged and unstaged content', () => {
+  fixture((dir) => {
+    const fakeBin = join(dir, 'fake-bin');
+    mkdirSync(fakeBin);
+    const marker = join(dir, 'untrusted-git-ran');
+    const fakeGit = join(fakeBin, 'git');
+    writeFileSync(fakeGit, `#!/bin/sh\nprintf ran > "${marker}"\nexit 0\n`);
+    chmodSync(fakeGit, 0o755);
+    const name = 'src/back\\slash.ts';
+    writeFileSync(join(dir, name), good);
+    must(dir, 'git', ['add', '--', name]);
+    writeFileSync(join(dir, name), bad);
+    const before = must(dir, 'git', ['diff', '--cached', '--binary']);
+    for (const path of [fakeBin, '', `.:${fakeBin}:/usr/bin`]) {
+      const result = spawnSync(
+        process.execPath,
+        [join(root, 'dist/src/check-paths.js')],
+        {
+          cwd: dir,
+          encoding: 'utf8',
+          env: { ...process.env, PATH: path },
+        },
+      );
+      assert.ifError(result.error);
+      assert.equal(result.status, 1, result.stdout + result.stderr);
+      assert.match(result.stderr, /Literal backslashes/);
+      assert.equal(existsSync(marker), false);
+    }
+    assert.equal(must(dir, 'git', ['diff', '--cached', '--binary']), before);
+    assert.equal(readFileSync(join(dir, name), 'utf8'), bad);
+    assert.equal(must(dir, 'git', ['stash', 'list']), '');
+  });
+});
+
+await test('Given valid staged names and untrusted PATH values, the filename guard succeeds without changing the index', () => {
+  fixture((dir) => {
+    const names = ['src/hello 世界.ts', 'src/double"quote.ts'];
+    for (const name of names) writeFileSync(join(dir, name), good);
+    must(dir, 'git', ['add', '--', ...names]);
+    const before = must(dir, 'git', ['diff', '--cached', '--binary']);
+    for (const path of ['', '.', '/nonexistent']) {
+      const result = spawnSync(
+        process.execPath,
+        [join(root, 'dist/src/check-paths.js')],
+        {
+          cwd: dir,
+          encoding: 'utf8',
+          env: { ...process.env, PATH: path },
+        },
+      );
+      assert.ifError(result.error);
+      assert.equal(result.status, 0, result.stdout + result.stderr);
+    }
+    assert.equal(must(dir, 'git', ['diff', '--cached', '--binary']), before);
+  });
+});
+
+await test('Given no Git repository, the filename guard fails closed with an empty PATH', () => {
+  const dir = mkdtempSync('/tmp/quality-no-git-');
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [join(root, 'dist/src/check-paths.js')],
+      {
+        cwd: dir,
+        encoding: 'utf8',
+        env: {
+          PATH: '',
+          GIT_CONFIG_NOSYSTEM: '1',
+          GIT_CONFIG_GLOBAL: '/dev/null',
+        },
+      },
+    );
+    assert.ifError(result.error);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /Unable to read staged filenames/);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+await test('Given an explicit custom Git installation, the guard uses it without searching PATH', () => {
+  const dir = mkdtempSync(join(fixtureRoot, 'custom-git-'));
+  try {
+    const executable = join(dir, 'custom git');
+    symlinkSync('/usr/bin/git', executable);
+    const result = spawnSync(
+      process.execPath,
+      [join(root, 'dist/src/check-paths.js')],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: '',
+          CODE_QUALITY_GIT_EXECUTABLE: executable,
+        },
+      },
+    );
+    assert.ifError(result.error);
+    assert.equal(result.status, 0, result.stdout + result.stderr);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
+await test('Given invalid or missing configured Git, the guard fails without a PATH fallback', () => {
+  for (const executable of ['', 'git', '/nonexistent/quality/git']) {
+    const result = spawnSync(
+      process.execPath,
+      [join(root, 'dist/src/check-paths.js')],
+      {
+        cwd: root,
+        encoding: 'utf8',
+        env: {
+          ...process.env,
+          PATH: '/usr/bin:/bin',
+          CODE_QUALITY_GIT_EXECUTABLE: executable,
+        },
+      },
+    );
+    assert.ifError(result.error);
+    assert.equal(result.status, 1, result.stdout + result.stderr);
+    assert.match(result.stderr, /commit checks stopped/);
+  }
 });

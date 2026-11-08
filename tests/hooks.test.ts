@@ -22,12 +22,36 @@ mkdirSync(fixtureRoot, { recursive: true });
 const good = "export const greeting = 'hello';\n";
 const bad = 'export const greeting="hello"\n';
 
+// Preserve registry transport settings without inheriting user npm configuration.
+const registryEnvironment = Object.fromEntries(
+  [
+    'HTTP_PROXY',
+    'HTTPS_PROXY',
+    'NO_PROXY',
+    'http_proxy',
+    'https_proxy',
+    'no_proxy',
+    'NPM_CONFIG_PROXY',
+    'NPM_CONFIG_HTTPS_PROXY',
+    'NPM_CONFIG_NOPROXY',
+    'npm_config_proxy',
+    'npm_config_https_proxy',
+    'npm_config_noproxy',
+    'NODE_EXTRA_CA_CERTS',
+    'SSL_CERT_FILE',
+  ].flatMap((key) => {
+    const value = process.env[key];
+    return value === undefined ? [] : [[key, value]];
+  }),
+);
+
 function command(cwd: string, executable: string, args: string[]) {
   const result = spawnSync(executable, args, {
     cwd,
     encoding: 'utf8',
     timeout: executable === 'npm' ? 120_000 : 30_000,
     env: {
+      ...(executable === 'npm' ? registryEnvironment : {}),
       PATH: `${dirname(process.execPath)}:/usr/bin:/bin:/usr/sbin:/sbin`,
       HOME: cwd,
       XDG_CONFIG_HOME: join(cwd, '.config'),

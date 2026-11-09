@@ -2,3 +2,4 @@
 **/dist/**
 **/coverage/**
 **/.fixtures/**
+/src/osv-schema-v1.9.2.json

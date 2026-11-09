@@ -17,10 +17,14 @@
     "./prettier": "./dist/src/prettier.js",
     "./lint-staged": "./dist/src/lint-staged.js",
     "./ignore": "./quality.ignore",
-    "./check-paths": "./dist/src/check-paths.js"
+    "./check-paths": "./dist/src/check-paths.js",
+    "./scan-report": "./dist/src/scan-report.js",
+    "./eslint-import": "./dist/src/eslint-import.js",
+    "./coverage-import": "./dist/src/coverage-import.js"
   },
   "scripts": {
     "build": "tsc",
+    "import:report": "node dist/src/import-cli.js",
     "format": "prettier --ignore-path quality.ignore --write .",
     "format:check": "prettier --ignore-path quality.ignore --check .",
     "lint": "eslint . --max-warnings 0",

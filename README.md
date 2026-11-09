@@ -1,10 +1,96 @@
-# Shared TypeScript code quality (RRDSCRUM-69)
+# TypeScript code quality and customer-run scans
 
 ## Development
 
 Use tested Node 22.23.4 and the exact package/lockfile pins. ESLint 10.13.0 and typescript-eslint 8.72.1 support TypeScript 5.9.3, not TypeScript 7. Pinned jiti loads TS configurations; only emitted dist JavaScript is generated.
 After cloning: `npm ci`, `npm run setup:dev`, then `npm run check`. Developer setup builds and installs Husky hooks. Git-dependency prepare builds exports only and must not alter consumer hooks.
 Tests use disposable Git repositories and ordinary commits. Installation smoke tests access the npm registry; no customer code or hosted CI runs.
+
+## Offline report imports
+
+The `import:report` command parses existing reports without running scanners or
+reading repository configuration. It accepts UTF-8 JSON on stdin (at most
+262144 bytes) and a caller-declared commit SHA of exactly 40 lowercase hexadecimal
+characters.
+
+```sh
+npm run import:report -- --help
+node dist/src/import-cli.js eslint "$COMMIT_SHA" < eslint-report.json
+node dist/src/import-cli.js coverage "$COMMIT_SHA" < coverage-summary.json
+node dist/src/import-cli.js aggregate "$COMMIT_SHA" < scanner-claims.json
+```
+
+ESLint imports use the ESLint 10.13.0 JSON dialect. Coverage imports use the
+Istanbul reports 3.1.7 JSON-summary dialect. The aggregate includes the ESLint,
+TypeScript, Gitleaks, jscpd, OSV, tests and coverage slots.
+All imported evidence is `imported-unverified`: a parsed report or complete
+aggregate does not prove scanner execution or a passing quality gate.
+
+Import exit codes are 0 for a parsed import or complete aggregate, 1 for an
+incomplete aggregate, and 2 for invalid arguments, input or I/O. The public
+`/scan-report`, `/eslint-import` and `/coverage-import` exports provide the
+corresponding JavaScript APIs.
+
+## Customer-run committed-source scans
+
+The `/customer-scan` export provides `scanCommittedSource`. The
+`scan:committed` command accepts a JSON request on stdin and emits a bounded
+execution report:
+
+```sh
+npm run scan:committed -- --help
+node dist/src/scan-cli.js < scan-input.json
+```
+
+Required request fields are `gitExecutable` (a trusted absolute Git executable
+path), `gitDirectory` (the absolute path to the repository's Git object database)
+and `commitSha` (40 lowercase hexadecimal characters). For example, replace
+each placeholder with your own trusted local value:
+
+```json
+{
+  "gitExecutable": "/usr/bin/git",
+  "gitDirectory": "/absolute/path/to/repository/.git",
+  "commitSha": "<40-character-lowercase-commit-sha>"
+}
+```
+
+Requests are limited to 262144 UTF-8 bytes. Optional fields are
+`tools.gitleaks`, `tools.jscpd`, `tools.osv`, `osvDatabase`,
+`declarationBundle.files`, `imports` and `coverageSummary`.
+Use `--help` for the execution manifest and pinned tool versions.
+
+The runner copies a bounded committed snapshot, excluding dirty working-tree
+changes and untracked files. It does not execute project configuration, plugins,
+install scripts or tests. The bundled ESLint syntax rules and fixed TypeScript
+semantic profile run independently of the project's configuration. An explicit
+validated declaration-only bundle can supply dependency types; unresolved
+dependencies and source suppression directives limit coverage. This is not the
+project's full type check.
+
+Gitleaks, jscpd and OSV require caller-supplied, trusted absolute paths to the
+pinned binaries. Native binaries are pinned for Linux x64, with Linux process
+supervision and resource limits; there is no platform fallback or automatic tool
+download. Missing tools are reported as missing rather than silently installed.
+
+Offline OSV scanning supports npm package-lock inputs. Supply
+`osvDatabase` with an absolute `archivePath`, its SHA-256 `sha256`, and an
+`asOf` timestamp. The caller supplies the archive and must have permission to use
+its data. Schema and engine licenses do not grant advisory-database or commercial
+service rights. Database completeness remains unverified; unsupported dependency
+manifests and other limitations are reported rather than treated as clean scans.
+
+Reports distinguish executed, missing, failed, timed-out, limited and
+imported-unverified evidence. Tests and coverage remain unverified imports.
+Execution reports deliberately retain `status: "incomplete"`; finding counts
+are not a passing quality gate. The scan CLI exits 0 for help, 1 for an incomplete
+execution report, and 2 for invalid input or I/O.
+
+The runtime and supplied Git installation must be trusted. This is not a
+hostile-code sandbox. Snapshot limits include a 64 MiB object store, 16 MiB of
+source, 1000 source files and 1 MiB per source file. Shallow repositories,
+alternates and linked-worktree object stores are unsupported. Keep local request
+files, advisory archives and raw reports out of public commits.
 
 ## Reviewed consumer adoption
 

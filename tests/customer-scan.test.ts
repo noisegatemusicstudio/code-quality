@@ -192,6 +192,26 @@ await test('snapshot reads immutable blobs, ignores checkout changes and cleans 
   }
 });
 
+await test('snapshot rejects commit and blob bytes that do not match Git object IDs', async () => {
+  const f = await fixture();
+  try {
+    for (const type of ['commit', 'blob']) {
+      const executable = join(f.root, `alter-${type}`);
+      await writeFile(
+        executable,
+        `#!/bin/sh\nif [ "$4:$5" = 'cat-file:${type}' ]; then\n  printf 'altered object bytes'\nelse\n  exec /usr/bin/git "$@"\nfi\n`,
+        { mode: 0o700 },
+      );
+      await assert.rejects(
+        createCommittedSnapshot({ ...f.options, gitExecutable: executable }),
+        /Committed snapshot unavailable/,
+      );
+    }
+  } finally {
+    await f.dispose();
+  }
+});
+
 await test('symlink tree entries and external object alternates fail closed', async () => {
   const f = await fixture();
   try {

@@ -25,7 +25,10 @@ async function main() {
     }
   };
   await walk(root);
-  files.sort();
+  files.sort((left, right) => {
+    if (left === right) return 0;
+    return left < right ? -1 : 1;
+  });
   let findings = 0;
   let unresolved = 0;
   let suppressionCount = 0;

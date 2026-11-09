@@ -172,9 +172,9 @@ async function runExternalScannerInner(
     binarySha256: pin.sha256,
     config: 'bundled-v1-default-rules-no-project-config',
   };
+  if (executable === undefined) return result;
   if (process.platform !== 'linux' || process.arch !== 'x64')
     return { ...result, state: 'failed', reason: 'unsupported-platform' };
-  if (executable === undefined) return result;
   let binary: Buffer;
   try {
     if (

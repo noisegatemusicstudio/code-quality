@@ -141,9 +141,9 @@ async function runOfflineOsvInner(
     binarySha256: osvPin.sha256,
     coverage: 'npm-package-lock-only',
   };
+  if (executable === undefined || database === undefined) return result;
   if (process.platform !== 'linux' || process.arch !== 'x64')
     return { ...result, state: 'failed', reason: 'unsupported-platform' };
-  if (executable === undefined || database === undefined) return result;
   let directory = '';
   let uncertain = false;
   let inFlight = false;
@@ -264,7 +264,10 @@ async function runOfflineOsvInner(
       }
     };
     await walk(sourceDirectory);
-    lockfiles.sort();
+    lockfiles.sort((left, right) => {
+      if (left === right) return 0;
+      return left < right ? -1 : 1;
+    });
     result.unsupportedManifestCount = unsupportedManifestCount;
     if (!lockfiles.length || lockfiles.length > 100)
       return { ...result, state: 'limited', reason: 'no-supported-lockfiles' };

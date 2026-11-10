@@ -225,11 +225,15 @@ export async function createCommittedSnapshot(options: {
     )
       throw fail();
     const commit = await git(['cat-file', 'commit', options.commitSha], 262144);
+    const commitPath = join(gitDirectory, 'verified-commit');
+    await writeFile(commitPath, commit, { flag: 'wx', mode: 0o600 });
     if (
-      createHash('sha1')
-        .update(`commit ${commit.length}\0`)
-        .update(commit)
-        .digest('hex') !== options.commitSha
+      (
+        await git(
+          ['hash-object', '-t', 'commit', '--no-filters', '--', commitPath],
+          128,
+        )
+      ).toString() !== `${options.commitSha}\n`
     )
       throw fail();
     const tree = await git(
@@ -239,6 +243,8 @@ export async function createCommittedSnapshot(options: {
     const entries = tree.toString('utf8').split('\0');
     if (entries.pop() !== '' || entries.length > 1000) throw fail();
     const manifest = createHash('sha256');
+    const blobPaths: string[] = [];
+    const expectedBlobIds: string[] = [];
     let byteCount = 0;
     for (const entry of entries) {
       const match =
@@ -262,21 +268,26 @@ export async function createCommittedSnapshot(options: {
       const bytes = await git(['cat-file', 'blob', oid], 1048576);
       byteCount += bytes.length;
       if (byteCount > 16777216) throw fail();
-      // Verify each returned blob against the committed object identifier.
-      const actual = createHash('sha1')
-        .update(`blob ${bytes.length}\0`)
-        .update(bytes)
-        .digest('hex');
-      if (actual !== oid) throw fail();
       manifest.update(`${mode}\0${path}\0${oid}\0`);
-      await mkdir(dirname(join(directory, path)), {
+      const blobPath = join(directory, path);
+      await mkdir(dirname(blobPath), {
         recursive: true,
         mode: 0o700,
       });
-      await writeFile(join(directory, path), bytes, {
+      await writeFile(blobPath, bytes, {
         flag: 'wx',
         mode: 0o600,
       });
+      blobPaths.push(blobPath);
+      expectedBlobIds.push(`${oid}\n`);
+    }
+    // Use Git's object-format implementation to verify the bytes the scanners will read.
+    if (blobPaths.length) {
+      const actualBlobIds = await git(
+        ['hash-object', '--no-filters', '--', ...blobPaths],
+        65536,
+      );
+      if (actualBlobIds.toString() !== expectedBlobIds.join('')) throw fail();
     }
     return {
       directory,

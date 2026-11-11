@@ -10,7 +10,14 @@ import {
 import { tmpdir } from 'node:os';
 import { join, resolve, isAbsolute } from 'node:path';
 import { readBoundedRegular } from './external-scanners.js';
-import type { ValidatedOsvDatabase } from './osv-database.js';
+import {
+  OSV_FILE_DATABASE_LIMITS,
+  type ValidatedOsvDatabase,
+} from './osv-database.js';
+import {
+  selectOsvValidationProfile,
+  type OsvValidationProfile,
+} from './osv-record-validation.js';
 import { fileURLToPath } from 'node:url';
 import { runScannerProcess } from './scanner-process.js';
 import { immutableMetadata } from './scan-metadata.js';
@@ -22,13 +29,13 @@ export const osvPin = immutableMetadata({
   coverage:
     'npm package-lock only; source resolution, call analysis, queries, downloads and updates disabled; caller database completeness/freshness unverified',
   databaseLimits: {
-    compressedBytes: 67108864,
-    expandedBytes: 134217728,
-    entries: 50000,
+    compressedBytes: 402653184,
+    expandedBytes: 2147483648,
+    entries: 500000,
     workerV8OldSpaceMiB: 256,
     bufferMemory:
-      'Separately bounded archive/entry/expanded byte limits; V8 old-space is not a total RSS cap',
-    validationTimeoutMs: 15000,
+      'File-backed streamed cache and bounded records; V8 old-space is not a total RSS cap',
+    validationTimeoutMs: 120000,
     officialFullArchiveCompatibility:
       'unverified; large full-ecosystem archives may exceed supported bounds',
   },
@@ -37,6 +44,7 @@ export interface OsvDatabaseInput {
   archivePath: string;
   sha256: string;
   asOf: string;
+  validationProfile?: OsvValidationProfile;
 }
 export interface OsvExecutionResult {
   id: 'osv';
@@ -150,6 +158,7 @@ async function runOfflineOsvInner(
   try {
     result.state = 'failed';
     result.reason = 'invalid-tool-or-database';
+    const validationProfile = selectOsvValidationProfile(database);
     if (
       !isAbsolute(executable) ||
       (await realpath(executable)) !== resolve(executable) ||
@@ -169,9 +178,6 @@ async function runOfflineOsvInner(
     const binary = await readBoundedRegular(executable, 67108864);
     if (createHash('sha256').update(binary).digest('hex') !== osvPin.sha256)
       return result;
-    const archive = await readBoundedRegular(database.archivePath, 67108864);
-    if (createHash('sha256').update(archive).digest('hex') !== database.sha256)
-      return result;
     directory = await mkdtemp(join(tmpdir(), 'code-quality-osv-'));
     const tool = join(directory, 'scanner');
     await writeFile(tool, binary, { flag: 'wx', mode: 0o700 });
@@ -181,17 +187,19 @@ async function runOfflineOsvInner(
       mode: 0o700,
     });
     const archivePath = join(cache, 'osv-scalibr/npm/all.zip');
-    await writeFile(archivePath, archive, { flag: 'wx', mode: 0o600 });
     inFlight = true;
     const validation = await runScannerProcess({
       executable: process.execPath,
       args: [
         '--max-old-space-size=256',
         fileURLToPath(new URL('./osv-database-worker.js', import.meta.url)),
+        database.archivePath,
         archivePath,
+        database.sha256,
+        validationProfile,
       ],
       cwd: directory,
-      timeoutMs: 15000,
+      timeoutMs: 120000,
       outputLimit: 8192,
     });
     inFlight = false;
@@ -207,7 +215,9 @@ async function runOfflineOsvInner(
       !record(metadata) ||
       metadata.sha256 !== database.sha256 ||
       metadata.schemaVersion !== '1.9.2' ||
-      metadata.declaredEcosystem !== 'npm'
+      metadata.declaredEcosystem !== 'npm' ||
+      metadata.validationProfile !== validationProfile ||
+      !record(metadata.metadataWarningCounts)
     )
       return result;
     for (const field of [
@@ -226,10 +236,54 @@ async function runOfflineOsvInner(
       )
         return result;
     }
+    const warnings = metadata.metadataWarningCounts;
+    for (const field of [
+      'records',
+      'referenceUriFormat',
+      'cvssV4TrailingSlash',
+    ]) {
+      if (
+        typeof warnings[field] !== 'number' ||
+        !Number.isSafeInteger(warnings[field]) ||
+        warnings[field] < 0
+      )
+        return result;
+    }
+    const warningRecords = warnings.records as number;
+    const referenceWarnings = warnings.referenceUriFormat as number;
+    const cvssWarnings = warnings.cvssV4TrailingSlash as number;
+    const entries = metadata.entryCount as number;
+    const hasWarnings = referenceWarnings > 0 || cvssWarnings > 0;
+    if (
+      (metadata.compressedBytes as number) >
+        OSV_FILE_DATABASE_LIMITS.compressedBytes ||
+      (metadata.expandedBytes as number) >
+        OSV_FILE_DATABASE_LIMITS.expandedBytes ||
+      entries > OSV_FILE_DATABASE_LIMITS.entries ||
+      (metadata.activeCount as number) + (metadata.withdrawnCount as number) !==
+        entries ||
+      (metadata.usableCount as number) > (metadata.activeCount as number) ||
+      (metadata.noAffectedCount as number) > entries ||
+      warningRecords > entries ||
+      warningRecords > referenceWarnings + cvssWarnings ||
+      warningRecords > 0 !== hasWarnings ||
+      referenceWarnings + cvssWarnings > entries * 200000 ||
+      (validationProfile === 'strict-schema-v1' && hasWarnings) ||
+      metadata.schemaConformance !==
+        (hasWarnings ? 'metadata-warnings' : 'strict')
+    )
+      return result;
     const validated: ValidatedOsvDatabase = {
       sha256: database.sha256,
       schemaVersion: '1.9.2',
       declaredEcosystem: 'npm',
+      validationProfile,
+      schemaConformance: hasWarnings ? 'metadata-warnings' : 'strict',
+      metadataWarningCounts: {
+        records: warningRecords,
+        referenceUriFormat: referenceWarnings,
+        cvssV4TrailingSlash: cvssWarnings,
+      },
       compressedBytes: metadata.compressedBytes as number,
       expandedBytes: metadata.expandedBytes as number,
       entryCount: metadata.entryCount as number,

@@ -1,5 +1,9 @@
 import { scanCommittedSource, executionManifest } from './customer-scan.js';
 import { isAbsolute } from 'node:path';
+import {
+  selectOsvValidationProfile,
+  type OsvValidationProfile,
+} from './osv-record-validation.js';
 
 const invalid = { schemaVersion: 2, status: 'invalid' };
 const object = (value: unknown): value is Record<string, unknown> =>
@@ -26,7 +30,7 @@ async function main(): Promise<void> {
           'tools.gitleaks',
           'tools.jscpd',
           'tools.osv',
-          'osvDatabase.{archivePath,sha256,asOf}',
+          'osvDatabase.{archivePath,sha256,asOf,validationProfile}',
           'declarationBundle.files',
           'imports',
           'coverageSummary',
@@ -97,7 +101,13 @@ async function main(): Promise<void> {
     }
   }
   let osvDatabase:
-    { archivePath: string; sha256: string; asOf: string } | undefined;
+    | {
+        archivePath: string;
+        sha256: string;
+        asOf: string;
+        validationProfile?: OsvValidationProfile;
+      }
+    | undefined;
   if (input.osvDatabase !== undefined) {
     const database = input.osvDatabase;
     if (
@@ -111,6 +121,7 @@ async function main(): Promise<void> {
       archivePath: database.archivePath,
       sha256: database.sha256,
       asOf: database.asOf,
+      validationProfile: selectOsvValidationProfile(database),
     };
   }
   const report = await scanCommittedSource({

@@ -80,6 +80,37 @@ its data. Schema and engine licenses do not grant advisory-database or commercia
 service rights. Database completeness remains unverified; unsupported dependency
 manifests and other limitations are reported rather than treated as clean scans.
 
+### Offline cache validation profiles
+
+OSV archives are copied in fixed-size chunks into an exclusive private cache
+while their SHA-256 is checked. Validation streams entries from that same cache
+without extracting the archive. The validated cache is read-only and is the only
+database supplied to the native scanner; the caller's archive is not changed.
+Copy and validation share a 120-second supervised deadline. File-backed limits
+are 384 MiB compressed, 2 GiB expanded, 500,000 entries and 8 MiB per record.
+The worker has a 256 MiB V8 old-space limit, which is not a total RSS cap.
+The small Buffer validation API retains its 64 MiB compressed, 128 MiB expanded
+and 50,000-entry limits and its ZIP32-only policy. File-backed validation accepts
+ordinary ZIP32 entries plus a narrow count-only ZIP64 directory envelope for large
+entry counts, not general ZIP64.
+
+The default `osvDatabase.validationProfile` is `strict-schema-v1`, validating
+against the unchanged pinned OSV 1.9.2 schema. Callers may explicitly set
+`"validationProfile": "npm-metadata-v1"` to recognize two narrow metadata defects:
+invalid URI formatting in top-level reference URLs, and a top-level CVSS v4 score
+with one trailing slash whose removal would match the pinned CVSS v4 pattern.
+The archive and records are never rewritten. Other schema errors, malformed
+records, corruption and duplicate entries still reject the entire archive.
+Inherited options do not enable the profile; unknown or null profiles fail.
+
+Results identify `validationProfile`, `schemaConformance` (`strict` or
+`metadata-warnings`) and `metadataWarningCounts` for affected records, reference
+URI formatting and trailing CVSS v4 slashes. These counts do not certify reference
+URLs or severity values. Neither profile establishes archive provenance,
+freshness, completeness or coverage of every dependency. Native scanning retains
+its separate 30-second deadline and resource limits, so successful validation
+does not guarantee successful scanning of an arbitrary archive.
+
 Reports distinguish executed, missing, failed, timed-out, limited and
 imported-unverified evidence. Tests and coverage remain unverified imports.
 Execution reports deliberately retain `status: "incomplete"`; finding counts

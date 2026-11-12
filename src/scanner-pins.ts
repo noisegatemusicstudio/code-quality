@@ -36,6 +36,42 @@ export const osvPin = immutableMetadata({
   },
 });
 
+/**
+ * Lint engines run through `runAdapter` on an explicit file list (Shell and
+ * GitHub Actions workflows). ShellCheck is GPL-3.0: it runs only as a separate,
+ * unbundled binary and is "customer: needs review" in docs/scanner-licensing.md.
+ */
+export const lintPins = immutableMetadata({
+  shellcheck: {
+    version: '0.11.0',
+    license: 'GPL-3.0',
+    sha256: '4da528ddb3a4d1b7b24a59d4e16eb2f5fd960f4bd9a3708a15baddbdf1d5a55b',
+    coverage:
+      'Tracked .sh/.bash/.ksh files, default checks at every severity, no rc file; sourced files are not followed',
+  },
+  shfmt: {
+    version: '3.14.1',
+    license: 'BSD-3-Clause',
+    sha256: '76e77641faa025814b77f153b29796b8e6fa2fca03e0c76a691608b86c7ea7bf',
+    coverage:
+      'Tracked .sh/.bash/.ksh files, diff mode (-d) with -i 2 -ci, never rewrites; a file shfmt cannot parse yields no shfmt finding (ShellCheck reports syntax errors)',
+  },
+  actionlint: {
+    version: '1.7.12',
+    license: 'MIT',
+    sha256: 'c872d6db8c6bf83a8eaa704fc93999f027d55dffbc63b8a6abdccb47df5f4cd4',
+    coverage:
+      'Tracked .github/workflows/*.yml|yaml, bundled defaults, no actionlint config; embedded ShellCheck/pyflakes integrations do not run',
+  },
+  zizmor: {
+    version: '1.32.0',
+    license: 'MIT',
+    sha256: '04d55fb88e582a8e9a9ce6b4753df723fc44c35e0d1a8e8771db9e017066c6df',
+    coverage:
+      'Tracked .github/workflows/*.yml|yaml, --offline: no GitHub API call, no token; online-only audits do not run',
+  },
+});
+
 /** Pinned engines that are not run through `runExternalScanner`. */
 export const trivyPin = immutableMetadata({
   version: '0.76.2',
@@ -95,5 +131,40 @@ export const releaseAssets = immutableMetadata({
     binarySha256: externalPins.jscpd.sha256,
     source:
       'npm registry dist.integrity sha512-BbL0HypadbjpxNfK/KY4CfpD4sCd2zf9HpFnGwwOjdryjdTG098isft/95BiS/XvZjVT3p6lwLf5ToI97OoqCg== for jscpd-linux-x64-gnu@5.4.3 (no upstream sha256 file is published; sha256 computed from that verified tarball)',
+  },
+  shellcheck: {
+    url: 'https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz',
+    assetSha256:
+      '8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198',
+    member: 'shellcheck-v0.11.0/shellcheck',
+    binarySha256: lintPins.shellcheck.sha256,
+    source:
+      'No upstream checksum file is published for v0.11.0; sha256 computed from the official release asset downloaded 2026-11-12',
+  },
+  shfmt: {
+    url: 'https://github.com/mvdan/sh/releases/download/v3.14.1/shfmt_v3.14.1_linux_amd64',
+    assetSha256: lintPins.shfmt.sha256,
+    member: null,
+    binarySha256: lintPins.shfmt.sha256,
+    source:
+      'No upstream checksum file is published for v3.14.1; sha256 computed from the official release asset downloaded 2026-11-12',
+  },
+  actionlint: {
+    url: 'https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz',
+    assetSha256:
+      '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8',
+    member: 'actionlint',
+    binarySha256: lintPins.actionlint.sha256,
+    source:
+      'https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_checksums.txt',
+  },
+  zizmor: {
+    url: 'https://github.com/zizmorcore/zizmor/releases/download/v1.32.0/zizmor-x86_64-unknown-linux-gnu.tar.gz',
+    assetSha256:
+      'bb110cc765eca9cd7efb2e284a956be5974c60027b0970f16397d86208a9957b',
+    member: 'zizmor',
+    binarySha256: lintPins.zizmor.sha256,
+    source:
+      'No upstream checksum file is published for v1.32.0; sha256 computed from the official release asset downloaded 2026-11-12',
   },
 });

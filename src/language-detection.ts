@@ -30,7 +30,11 @@ const rules: readonly LanguageRule[] = [
   { language: 'Java', test: ext(/\.java$/), engines: [] },
   { language: 'Kotlin', test: ext(/\.kts?$/), engines: [] },
   { language: 'Swift', test: ext(/\.swift$/), engines: [] },
-  { language: 'Shell', test: ext(/\.(?:sh|bash|zsh)$/), engines: [] },
+  {
+    language: 'Shell',
+    test: ext(/\.(?:sh|bash|ksh)$/),
+    engines: ['shellcheck', 'shfmt'],
+  },
   {
     language: 'Dockerfile',
     test: (p) =>
@@ -42,7 +46,7 @@ const rules: readonly LanguageRule[] = [
   {
     language: 'GitHub Actions',
     test: ext(/(?:^|\/)\.github\/workflows\/[^/]+\.ya?ml$/),
-    engines: [],
+    engines: ['actionlint', 'zizmor'],
   },
   { language: 'YAML', test: ext(/\.ya?ml$/), engines: [] },
   { language: 'Markdown', test: ext(/\.(?:md|markdown)$/), engines: [] },

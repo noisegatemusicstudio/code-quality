@@ -9,6 +9,10 @@ export const engineIds = [
   'trivy',
   'semgrep',
   'jscpd',
+  'shellcheck',
+  'shfmt',
+  'actionlint',
+  'zizmor',
 ] as const;
 export type EngineId = (typeof engineIds)[number];
 export type EngineStatus = 'completed' | 'failed' | 'incomplete' | 'skipped';
@@ -76,6 +80,8 @@ const isEngine = (value: string): value is EngineId =>
 
 const eslintExtension = /\.(?:[cm]?[jt]s)$/;
 const semgrepExtension = /\.(?:[cm]?[jt]s|[jt]sx)$/;
+const shellFile = /\.(?:sh|bash|ksh)$/;
+const workflowFile = /(?:^|\/)\.github\/workflows\/[^/]+\.ya?ml$/;
 const iacFile =
   /(?:\.(?:tf|tfvars|tf\.json|ya?ml|json|toml)|(?:^|\/)(?:Dockerfile|Containerfile)(?:\.[A-Za-z0-9_-]+)?)$/;
 /** Lockfiles osv-scanner understands; the offline adapter itself is npm-only. */
@@ -125,6 +131,14 @@ export function detectApplicability(
     semgrep: some((p) => semgrepExtension.test(p))
       ? yes
       : no('no JavaScript or TypeScript files'),
+    shellcheck: some((p) => shellFile.test(p)) ? yes : no('no shell scripts'),
+    shfmt: some((p) => shellFile.test(p)) ? yes : no('no shell scripts'),
+    actionlint: some((p) => workflowFile.test(p))
+      ? yes
+      : no('no GitHub Actions workflows'),
+    zizmor: some((p) => workflowFile.test(p))
+      ? yes
+      : no('no GitHub Actions workflows'),
   };
 }
 
@@ -140,6 +154,20 @@ export function normaliseSeverity(
   const label = nativeSeverity.toLowerCase();
   if (engine === 'gitleaks') return 'critical';
   if (engine === 'jscpd') return 'info';
+  // ShellCheck levels. shfmt only reports formatting. actionlint reports
+  // workflow errors without a native level. zizmor labels go through the table.
+  if (engine === 'shellcheck')
+    return label === 'error'
+      ? 'high'
+      : label === 'warning'
+        ? 'medium'
+        : label === 'info'
+          ? 'low'
+          : label === 'style'
+            ? 'info'
+            : 'high';
+  if (engine === 'shfmt') return 'info';
+  if (engine === 'actionlint') return 'medium';
   if (engine === 'eslint')
     return label === 'error' ? 'medium' : label === 'warn' ? 'low' : 'high';
   if (engine === 'semgrep')
@@ -157,6 +185,7 @@ export function normaliseSeverity(
     moderate: 'medium',
     low: 'low',
     info: 'info',
+    informational: 'info',
   };
   return table[label] ?? 'high';
 }

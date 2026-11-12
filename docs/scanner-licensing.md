@@ -129,23 +129,42 @@ Candidates for the slices in `docs/language-profiles.md`. Licence = first lines 
 the upstream `LICENSE`; versions are latest stable tags, not pins. All are run as
 separate, unbundled binaries; nothing is redistributed.
 
-| Engine              | Version         | Licence                                                 | Recommendation                                  |
-| ------------------- | --------------- | ------------------------------------------------------- | ----------------------------------------------- |
-| Ruff                | 0.17.4          | MIT                                                     | **Proceed**                                     |
-| mypy / pyright      | 2.4.1 / 1.1.414 | MIT / MIT                                               | **Proceed**                                     |
-| PMD                 | 7.29.0          | BSD-style                                               | **Proceed** (keep notice)                       |
-| Checkstyle          | 14.4.0          | LGPL-2.1                                                | Internal **proceed**; customer **needs review** |
-| SpotBugs            | 4.10.5          | LGPL-2.1                                                | Internal **proceed**; customer **needs review** |
-| FindSecBugs         | 1.14.0          | LGPL-3.0                                                | Internal **proceed**; customer **needs review** |
-| detekt              | 1.23.8          | Apache-2.0                                              | **Proceed**                                     |
-| ktlint              | 1.8.0           | MIT                                                     | **Proceed**                                     |
-| SwiftLint           | 0.65.1          | MIT                                                     | **Proceed**                                     |
-| ShellCheck          | 0.11.0          | GPL-3.0                                                 | Internal **proceed**; customer **needs review** |
-| shfmt               | 3.14.1          | BSD-3-Clause                                            | **Proceed**                                     |
-| hadolint            | 2.15.1          | GPL-3.0                                                 | Internal **proceed**; customer **needs review** |
-| tflint              | 0.66.0          | MPL-2.0                                                 | **Proceed** (unmodified, keep notice)           |
-| actionlint          | 1.7.12          | MIT                                                     | **Proceed**                                     |
-| zizmor              | 1.32.0          | MIT                                                     | **Proceed**                                     |
-| yamllint            | 1.38.0          | GPL-3.0                                                 | Internal **proceed**; customer **needs review** |
-| markdownlint / cli2 | 0.42.1 / 0.24.1 | MIT                                                     | **Proceed**                                     |
-| Prettier            | 3.9.10          | MIT (package metadata; upstream LICENSE not re-fetched) | **Proceed**                                     |
+| Engine              | Version         | Licence                                                 | Recommendation                                   |
+| ------------------- | --------------- | ------------------------------------------------------- | ------------------------------------------------ |
+| Ruff                | 0.17.4          | MIT                                                     | **Proceed**                                      |
+| mypy / pyright      | 2.4.1 / 1.1.414 | MIT / MIT                                               | **Proceed**                                      |
+| PMD                 | 7.29.0          | BSD-style                                               | **Proceed** (keep notice)                        |
+| Checkstyle          | 14.4.0          | LGPL-2.1                                                | Internal **proceed**; customer **needs review**  |
+| SpotBugs            | 4.10.5          | LGPL-2.1                                                | Internal **proceed**; customer **needs review**  |
+| FindSecBugs         | 1.14.0          | LGPL-3.0                                                | Internal **proceed**; customer **needs review**  |
+| detekt              | 1.23.8          | Apache-2.0                                              | **Proceed**                                      |
+| ktlint              | 1.8.0           | MIT                                                     | **Proceed**                                      |
+| SwiftLint           | 0.65.1          | MIT                                                     | **Proceed**                                      |
+| ShellCheck          | 0.11.0 (pinned) | GPL-3.0                                                 | Internal **proceed**; **customer: needs review** |
+| shfmt               | 3.14.1 (pinned) | BSD-3-Clause                                            | **Proceed**                                      |
+| hadolint            | 2.15.1          | GPL-3.0                                                 | Internal **proceed**; customer **needs review**  |
+| tflint              | 0.66.0          | MPL-2.0                                                 | **Proceed** (unmodified, keep notice)            |
+| actionlint          | 1.7.12 (pinned) | MIT                                                     | **Proceed**                                      |
+| zizmor              | 1.32.0 (pinned) | MIT                                                     | **Proceed**                                      |
+| yamllint            | 1.38.0          | GPL-3.0                                                 | Internal **proceed**; customer **needs review**  |
+| markdownlint / cli2 | 0.42.1 / 0.24.1 | MIT                                                     | **Proceed**                                      |
+| Prettier            | 3.9.10          | MIT (package metadata; upstream LICENSE not re-fetched) | **Proceed**                                      |
+
+### ShellCheck, shfmt, actionlint and zizmor (pinned 2026-11-12)
+
+Pinned in `src/scanner-pins.ts` and installed sha256-verified by
+`quality-scan.yml` (linux-amd64 release assets). Each runs as a separate,
+unmodified binary; nothing is bundled or redistributed.
+
+- **ShellCheck is GPL-3.0: customer: needs review.** Acceptable internally as a
+  separate, unbundled binary. Do not bundle, vendor or ship it to customers
+  until counsel confirms (slice 14 in `docs/language-profiles.md`). Customer-run
+  scans that install it themselves are a counsel question too.
+- shfmt (BSD-3-Clause), actionlint (MIT) and zizmor (MIT): keep the upstream
+  notices if ever redistributed.
+- Checksums: only actionlint publishes an upstream checksum file. ShellCheck,
+  shfmt and zizmor publish none for these tags (the usual `sha256sums`,
+  `.sha256` names return 404), so their asset and binary digests were computed
+  from the official release assets on 2026-11-12. That detects later change and
+  corruption, but it is not an independent upstream attestation.
+- zizmor runs `--offline`: no GitHub API call and no token.

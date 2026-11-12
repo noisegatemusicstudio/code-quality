@@ -127,7 +127,8 @@ default `high` equals the gate's.
 Every run lists the languages found with file counts. A language without a
 language-aware engine is reported as `skipped: no engine yet`, in both
 `summary.md` and `report.json` (`languages`). Today only TypeScript and
-JavaScript (ESLint, Semgrep), Dockerfile and Terraform (Trivy) count as
+JavaScript (ESLint, Semgrep), Shell (ShellCheck, shfmt), GitHub Actions
+workflows (actionlint, zizmor), Dockerfile and Terraform (Trivy) count as
 covered; gitleaks, OSV and jscpd are language-agnostic and not counted.
 
 ## 5. Jira mapping
@@ -143,8 +144,8 @@ covered; gitleaks, OSV and jscpd are language-agnostic and not counted.
 
 1. Clean up the five migration-debt rules in this repository and re-enable them.
 2. Python: Ruff and mypy adapters (RRDSCRUM-187).
-3. Shell: ShellCheck and shfmt (RRDSCRUM-188).
-4. GitHub Actions: actionlint and zizmor (cheap, MIT, we already ship workflows).
+3. Shell: ShellCheck and shfmt (RRDSCRUM-188). **Done**: pinned, severity-mapped.
+4. GitHub Actions: actionlint and zizmor (cheap, MIT, we already ship workflows). **Done**: pinned, zizmor offline.
 5. Dockerfile: hadolint (GPL, internal runs first).
 6. Terraform: tflint beside Trivy.
 7. Kotlin: detekt and ktlint (RRDSCRUM-186).

@@ -1,4 +1,10 @@
 import type { AdapterEnvelope, AdapterFinding } from './adapter-envelope.js';
+import {
+  isDockerfile,
+  isMarkdownFile,
+  isTerraformFile,
+  isYamlFile,
+} from './lint-adapters.js';
 import { renderLanguages, type LanguageReport } from './language-detection.js';
 
 /** Engines the reusable `quality-scan` workflow can run, in report order. */
@@ -13,6 +19,10 @@ export const engineIds = [
   'shfmt',
   'actionlint',
   'zizmor',
+  'hadolint',
+  'tflint',
+  'yamllint',
+  'markdownlint',
 ] as const;
 export type EngineId = (typeof engineIds)[number];
 export type EngineStatus = 'completed' | 'failed' | 'incomplete' | 'skipped';
@@ -139,6 +149,10 @@ export function detectApplicability(
     zizmor: some((p) => workflowFile.test(p))
       ? yes
       : no('no GitHub Actions workflows'),
+    hadolint: some(isDockerfile) ? yes : no('no Dockerfile or Containerfile'),
+    tflint: some(isTerraformFile) ? yes : no('no Terraform (.tf) files'),
+    yamllint: some(isYamlFile) ? yes : no('no YAML files'),
+    markdownlint: some(isMarkdownFile) ? yes : no('no Markdown files'),
   };
 }
 
@@ -178,6 +192,19 @@ export function normaliseSeverity(
         : label === 'info'
           ? 'low'
           : 'high';
+  // Lint engines: errors are medium, warnings low, notices and style info.
+  // markdownlint has no native levels (recorded as `error`), so it ranks low.
+  if (engine === 'markdownlint') return label === 'error' ? 'low' : 'high';
+  if (engine === 'hadolint' || engine === 'tflint' || engine === 'yamllint') {
+    const lint: Record<string, Severity> = {
+      error: 'medium',
+      warning: 'low',
+      notice: 'info',
+      info: 'info',
+      style: 'info',
+    };
+    return lint[label] ?? 'high';
+  }
   const table: Record<string, Severity> = {
     critical: 'critical',
     high: 'high',

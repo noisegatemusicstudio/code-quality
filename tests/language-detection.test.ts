@@ -42,13 +42,14 @@ await test('every language present is listed with its file count', () => {
 
 await test('languages without an engine are skipped, never clean', () => {
   const byName = new Map(detectLanguages(paths).map((l) => [l.language, l]));
-  for (const name of ['Python', 'Kotlin', 'YAML', 'Markdown']) {
+  for (const name of ['Python', 'Kotlin']) {
     assert.equal(byName.get(name)?.status, 'skipped: no engine yet', name);
     assert.deepEqual(byName.get(name)?.engines, []);
   }
   assert.equal(byName.get('TypeScript')?.status, 'covered');
   assert.deepEqual(byName.get('TypeScript')?.engines, ['eslint', 'semgrep']);
-  assert.equal(byName.get('Terraform')?.status, 'covered');
+  for (const name of ['Terraform', 'Dockerfile', 'YAML', 'Markdown'])
+    assert.equal(byName.get(name)?.status, 'covered', name);
 });
 
 await test('Shell and GitHub Actions workflows count as covered', () => {

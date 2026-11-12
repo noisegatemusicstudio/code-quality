@@ -595,6 +595,63 @@ committed-snapshot API, so they need a full-history checkout, Git 2.47 or newer,
 and stay within its size bounds (otherwise they report `failed`). A project's own
 ESLint config is ignored; the bundled rules run instead.
 
+## Running outside GitHub Actions
+
+The same CLI runs a scan without GitHub Actions, for example from the
+ReleaseReady Dev app. It is two steps. `$TOOLS` and `$OUT` are directories you
+choose; `<sha>` is the full 40-character commit of this package you are running.
+
+```sh
+node dist/src/quality-scan-cli.js install --dir "$TOOLS" --scanners all
+node dist/src/quality-scan-cli.js run \
+  --repo "$REPO" --out "$OUT" --tools-dir "$TOOLS" --scanners all \
+  --code-quality-ref <sha> \
+  --manifest local --repository owner/name --ref refs/heads/main \
+  --event push --run-id 1 --run-attempt 1
+```
+
+- `--repo` must be a real git checkout. The commit SHA is always
+  `git rev-parse HEAD` in `--repo`; it cannot be passed as a flag. Gitleaks and
+  jscpd also need full history and Git 2.47 or newer (see Known limits below).
+- **`--manifest local`** writes `manifest.json` (same schema, `schemaVersion` 1,
+  no new fields) without any `GITHUB_*` variable. The identity comes from flags
+  validated with the same rules as the Actions path:
+  `--repository owner/name`, `--ref refs/heads/<branch>` (or
+  `refs/pull/<n>/merge` with `--event pull_request`), `--event push` or
+  `pull_request`, `--run-id <positive integer>` and `--run-attempt <positive
+integer>` (default `1`). `workflowRef` is the fixed value
+  `local:releaseready-dev`, which consumers can use to tell local runs from
+  Actions runs. A missing or malformed flag stops the run with exit 2 before
+  any scanner runs.
+- The identity flags are refused (exit 2) without `--manifest local`, and
+  `--manifest local` is refused when `GITHUB_ACTIONS=true`. Without
+  `--manifest local` the behaviour is unchanged: a manifest is written only on
+  GitHub Actions, from the `GITHUB_*` variables.
+- `report.json` records the `--repository` value as its `repository`.
+  Reviewed exceptions use the checked-out file (the pull-request base-commit
+  rule applies only where the Actions event payload exists).
+
+**Engines.** `install` downloads and verifies, into `$TOOLS`: gitleaks, trivy,
+osv, jscpd, ruff, pmd, checkstyle, shellcheck, shfmt, actionlint, zizmor,
+hadolint and tflint. ESLint is bundled with this package. These are installed
+separately; if you do not point `run` at them they are reported as failed
+("not installed"), never as clean:
+
+| Engine                 | Install                                                              | `run` flag                                        |
+| ---------------------- | -------------------------------------------------------------------- | ------------------------------------------------- |
+| semgrep                | `pip install --require-hashes -r scanners/semgrep-requirements.txt`  | `--semgrep <path to semgrep>`                     |
+| yamllint               | `pip install --require-hashes -r scanners/yamllint-requirements.txt` | `--yamllint <path to yamllint>`                   |
+| markdownlint           | `markdownlint-cli2` from this package's `package-lock.json`          | `--markdownlint-cli2 <path to markdownlint-cli2>` |
+| Java (PMD, Checkstyle) | a JDK, found through `JAVA_HOME`                                     | `--java <path to java>`                           |
+
+**Gate.** The verdict is in `$OUT/report.json` under `decision`:
+`decision.wouldFail` is true when the gate would fail (an engine failed or is
+incomplete, or a finding is at or above the threshold), and
+`decision.exitCode` is the exit code the CLI used (`1` only with
+`--enforce true` and `wouldFail`; otherwise `0`). Advisory runs always compute
+`wouldFail` but exit 0, so a runner should read `decision.wouldFail`, not the
+process exit status alone. Exit 2 means invalid input.
+
 ## Language profiles and default gate
 
 `docs/language-profiles.md` lists the industry-standard tool per language, the

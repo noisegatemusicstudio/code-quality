@@ -58,3 +58,7 @@ export function toRepositoryPath(
 
 export const percent = (r: Ratio): number | null =>
   r.total === 0 ? null : (r.covered / r.total) * 100;
+
+/** Locale-independent code-unit ordering, so output is deterministic. */
+export const compareText = (a: string, b: string): number =>
+  a < b ? -1 : a > b ? 1 : 0;

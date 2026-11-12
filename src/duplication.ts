@@ -1,6 +1,7 @@
 import type { ScannerAdapter } from './scanner-adapter.js';
 import {
   type Ratio,
+  compareText,
   exclusionMatcher,
   isCommit,
   isCount,
@@ -275,7 +276,9 @@ export function parseJscpdReport(
     });
   }
   if (unmatched.length > 0)
-    return result('unmatched', { unmatched: [...new Set(unmatched)].sort() });
+    return result('unmatched', {
+      unmatched: [...new Set(unmatched)].sort(compareText),
+    });
   const dup = duplicatedLineSets(clones);
   let duplicated = 0;
   for (const set of Object.values(dup)) duplicated += set.size;
@@ -292,14 +295,16 @@ export function parseJscpdReport(
   )
     return result('invalid');
   const notAnalyzed = inSet
-    ? [...inSet].filter((f) => !(f in analyzed) && !isExcluded(f)).sort()
+    ? [...inSet]
+        .filter((f) => !(f in analyzed) && !isExcluded(f))
+        .sort(compareText)
     : [];
   return result('complete', {
     clones,
     analyzed,
     totals: { covered: duplicated, total },
     cloneCount: clones.length,
-    excluded: [...new Set(excluded)].sort(),
+    excluded: [...new Set(excluded)].sort(compareText),
     notAnalyzed,
   });
 }

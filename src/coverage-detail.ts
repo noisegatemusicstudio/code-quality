@@ -1,5 +1,6 @@
 import {
   type Ratio,
+  compareText,
   exclusionMatcher,
   isCommit,
   isCount,
@@ -190,11 +191,11 @@ export function parseCoverageDetail(
     files.push(parsed);
   }
   if (unmatched.length > 0)
-    return result('unmatched', { unmatched: unmatched.sort() });
-  files.sort((a, b) => (a.path < b.path ? -1 : 1));
+    return result('unmatched', { unmatched: unmatched.sort(compareText) });
+  files.sort((a, b) => compareText(a.path, b.path));
   const missing = [...inSet]
     .filter((f) => !seen.has(f) && !isExcluded(f))
-    .sort();
+    .sort(compareText);
   const sum = (pick: (f: FileCoverage) => Ratio): Ratio =>
     files.reduce(
       (a, f) => ({
@@ -205,7 +206,7 @@ export function parseCoverageDetail(
     );
   return result(missing.length > 0 ? 'partial' : 'complete', {
     files,
-    excluded: excluded.sort(),
+    excluded: excluded.sort(compareText),
     missing,
     lines: sum((f) => f.lines),
     branches: sum((f) => f.branches),

@@ -23,7 +23,7 @@ npm via the registry). Where they differ from our pin, both are shown.
 | Gitleaks Action | see below | Proprietary EULA | n/a | **Reject** |
 | OSV-Scanner | v2.7.1 | Apache-2.0 | OSV data: per-source, mixed incl. NC/SA | **Proceed** scanner; **Defer** bundling data |
 | Trivy | v0.76.2 | Apache-2.0 | Misconfig checks MIT; vuln DB data terms unknown | **Proceed** scanner; **Defer** DB/bundle |
-| Semgrep CE engine | v1.185.0 | LGPL-2.1 | Semgrep-maintained rules: Semgrep Rules License v1.0 | **Defer** engine; **Reject** registry rules |
+| Semgrep CE engine | v1.185.0 | LGPL-2.1 | Semgrep-maintained rules: Semgrep Rules License v1.0 (internal use only) | **Proceed** engine (LGPL review); **Reject** Semgrep rules in product; **Defer** third-party rules |
 | CodeQL | CLI v2.27.4 | GitHub CodeQL Terms | restricted | **Reject** |
 | jscpd | 5.4.3 | MIT | n/a | **Proceed** |
 | Istanbul coverage formats | istanbul-reports 3.2.0 (we parse 3.1.7 dialect) | BSD-3-Clause | n/a | **Proceed** |
@@ -63,10 +63,27 @@ npm via the registry). Where they differ from our pin, both are shown.
 - Recommendation: **Proceed** with engine and checks, customer-run; **Defer** DB redistribution or hosted DB mirroring.
 
 ### Semgrep CE engine and Semgrep Registry rules
-- Engine: Semgrep CE v1.185.0 ([tags](https://github.com/semgrep/semgrep/tags)), LGPL-2.1 ([LICENSE](https://raw.githubusercontent.com/semgrep/semgrep/develop/LICENSE)). LGPL permits redistribution and hosted use with its obligations (notices, source/relink for the library). Other Semgrep terms (service terms, CE feature limits) were not verified: `unknown`.
-- Rules: the `semgrep-rules` repository is under the Semgrep Rules License v1.0 ([LICENSE pointer](https://raw.githubusercontent.com/semgrep/semgrep-rules/develop/LICENSE), [licence text](https://semgrep.dev/legal/rules-license)). The licence text could not be fetched from this environment (host blocked). Semgrep's own licensing page, seen only via search summary, says vendors may not use Semgrep-maintained rules in competing products or SaaS offerings while internal use is welcome ([docs](https://semgrep.dev/docs/licensing)); some older pages cite Commons Clause. Rule text is therefore **unverified and restrictive**.
-- ReleaseReady intends a customer code-quality product, which likely counts as competing use. Redistribution and hosted use of Semgrep-maintained rules: **no / unknown**.
-- Recommendation: **Reject** registry/Semgrep-maintained rules. **Defer** the engine until we have written our own rules (RRDSCRUM-133) and legal has read the rules licence and Semgrep terms.
+Sources: dated captures taken 2026-11-12 by the project owner of the [Rules License](https://semgrep.dev/legal/rules-license/) and the [licensing summary](https://docs.semgrep.dev/licensing) (PDFs not in this repo; quotes below were relayed by the owner and not re-fetched by the author of this doc), plus the [Semgrep terms](https://semgrep.dev/legal/terms/) and the [engine licence](https://github.com/semgrep/semgrep/blob/develop/LICENSE). Version: Semgrep CE v1.185.0 ([tags](https://github.com/semgrep/semgrep/tags)).
+
+**Engine (standalone CE): proceed subject to LGPL compliance review.**
+- LGPL-2.1. The Semgrep terms exclude the "Semgrep OSS Engine" from their proprietary Software definition and say it is licensed under LGPL 2.1. The engine licence states: "The act of running a program using the Library is not restricted".
+- No blanket ban on commercial use of the standalone engine was found. Shipping it needs a packaging-specific LGPL review (notices, source/modification and relinking obligations). Hosted use of the engine alone: allowed in principle, same review.
+- CE is feature-limited (taint is "Single file, single-function taint" per Semgrep's comparison); it is not equivalent to Semgrep Pro. This grants no rights to Semgrep-maintained rules or proprietary services.
+
+**Semgrep-maintained rules (Rules License v1.0): do not use in the customer product.**
+- The licence limits use to "your own internal business purposes" and does not allow distribution or making the rules available as a service. The summary says: "Vendors cannot use Semgrep-maintained rules in competing products or SaaS offerings."
+
+| Use | Status |
+|---|---|
+| Scanning ReleaseReady's own repositories | Permitted as internal business use, subject to the licence's other terms |
+| Hosted customer scans | Not permitted without separate written permission from Semgrep |
+| Shipping/copying rules into the repo or product | Conflicts with the distribution restriction; no overriding notice/attribution found. Internal-only copies: check the full dated copy first |
+| Customer-run CI that downloads the rules, with ReleaseReady integrating results | Not expressly resolved by the text: unknown. Obtain Semgrep's written permission before relying on it |
+| Meaning of "competing" | Not precisely defined; a customer-facing code-quality/SAST product is a clear risk and must not be assumed permitted. Legal question |
+
+**Third-party Registry rules:** keep their source-repository licences. No rule IDs or packs are proposed yet, so licences are unknown. Each rule and its source/version needs individual review; neither blanket approval nor blanket rejection is supported.
+
+**Recommendation:** standalone CE engine **Proceed (conditional on LGPL review)**; Semgrep-maintained rules in the customer product **Reject unless Semgrep grants written permission**; third-party rules **Defer, per-rule review**. Interpretations above are the owner's, not legal advice; counsel confirms the competing-use boundary.
 
 ### CodeQL
 - Version: CLI v2.27.4 ([tags](https://github.com/github/codeql-cli-binaries/tags)). Licence: GitHub CodeQL Terms and Conditions ([LICENSE.md](https://raw.githubusercontent.com/github/codeql-cli-binaries/main/LICENSE.md)).
@@ -85,7 +102,7 @@ npm via the registry). Where they differ from our pin, both are shown.
 
 ## Consequences for RRDSCRUM-128..136
 - Approved for the first adapters: ESLint/typescript-eslint, Gitleaks CLI, OSV-Scanner (online data), Trivy engine and checks, jscpd, Istanbul JSON import.
-- Blocked on legal/verification: bundled OSV data, Trivy DB, Semgrep (engine terms and rules), any third-party ESLint plugin, transitive licence scan.
-- Not usable: CodeQL, Gitleaks Action, Semgrep registry rules. RRDSCRUM-133 (SAST engines and licensed rules) must start from our own rules or a separately licensed pack.
+- Blocked on legal/verification: bundled OSV data, Trivy DB, Semgrep LGPL packaging review and per-rule third-party review, any third-party ESLint plugin, transitive licence scan.
+- Not usable: CodeQL, Gitleaks Action, Semgrep-maintained rules. RRDSCRUM-133 (SAST engines and licensed rules) must start from our own rules or a separately licensed pack.
 - No Sonar analyzer is embeddable; ReleaseReady's own Sonar work stays under RRDPLAT-22/29.
 - Re-check versions and licences at integration time; this table is a dated snapshot.

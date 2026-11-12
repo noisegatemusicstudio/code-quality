@@ -28,6 +28,8 @@
     "./scanner-adapter": "./dist/src/scanner-adapter.js",
     "./gitleaks-adapter": "./dist/src/gitleaks-adapter.js",
     "./osv-adapter": "./dist/src/osv-adapter.js",
+    "./trivy-adapter": "./dist/src/trivy-adapter.js",
+    "./dependency-correlation": "./dist/src/dependency-correlation.js",
     "./quality-measures": "./dist/src/quality-measures.js",
     "./coverage-detail": "./dist/src/coverage-detail.js",
     "./duplication": "./dist/src/duplication.js",

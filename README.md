@@ -247,6 +247,42 @@ same package, version and path are merged; different versions or paths never are
 A clean result does not guarantee the absence of unknown vulnerabilities; it
 means no known advisory in the consulted data matched.
 
+### Trivy container and infrastructure adapter
+
+`runTrivyScan` (`/trivy-adapter`) runs the pinned Trivy (0.76.2, Apache-2.0)
+through `runAdapter` on one explicit target. Pass the trusted binary path and its
+exact `--version` output.
+
+- **Image** (`image-digest` `registry/name@sha256:<64 hex>`, or `image-tarball`
+  with an absolute `.tar`/`.tar.gz`/`.tgz` path): only `--scanners vuln`, and
+  `--image-src remote` or `--input`, so the Docker, containerd and podman sockets
+  are never used. Tag-only references and other formats are `skipped`.
+- **IaC** (`iac` with repository-relative files): `trivy config` (misconfiguration
+  only) on files written to a private workspace. Unsupported files, and files
+  Trivy reads implicitly (`trivy.yaml`, `.trivyignore*`), are dropped and listed
+  in `disclosure.droppedFiles`; with nothing left the run is `skipped`
+  (`no-supported-files`).
+- Images are never started, infrastructure is never applied and customer scripts
+  are never run. The scrubbed environment carries no registry or cloud
+  credentials, so a private registry fails as `failed`/`engine-error`; pass
+  `registryAccess: false` when it is known and the run is `skipped`. Network use
+  and Terraform remote-module downloads are not enforced here.
+- **Database.** Customer-run with the online DB is the default. Offline image
+  scans need `databaseUpdatedAt` and refuse data older than `maxDatabaseAgeDays`
+  (default 7) or dated in the future; version and timestamp are disclosed and the
+  date is in `rulesetVersion`. Bundling or hosting a DB copy needs clearance
+  (`docs/scanner-licensing.md`). Flags (`--offline-scan`, `--skip-db-update`) are
+  unverified against a real binary because tests never download or run it.
+- Vulnerabilities use the OSV `DependencyFinding` shape (`artefactKind: 'image'`)
+  plus `severity: { label, source }`; misconfigurations give `path`, `resource`,
+  `ruleId`, `severity`, `remediation`. Free text is redacted; secret findings and
+  echoed source lines are never copied.
+- `correlateDependencyFindings` (`/dependency-correlation`) groups OSV and Trivy
+  findings by package, version, ecosystem and shared advisory id/alias: `total`
+  counts each issue once while `occurrences` keeps every source.
+- Outcomes beyond the shared reason enum (`registry-denied`, `stale-database`,
+  `database-info-missing`, `unsupported-target`) are in `disclosure.outcome`.
+
 ## Coverage and duplication measures
 
 Three exports report coverage and duplication with provenance. None of them runs

@@ -5,10 +5,10 @@ import {
   type EnvelopeReason,
   type EnvelopeScope,
   envelopeLimits,
-  findingFingerprint,
   isSafeRelativePath,
   redactMessage,
 } from './adapter-envelope.js';
+import { assembleFindings } from './finding-assembly.js';
 import {
   type ParsedOutput,
   type ScannerAdapter,
@@ -123,28 +123,7 @@ export function parseRuffReport(
       message: redactMessage(item.message) || (code ?? 'invalid-syntax'),
     });
   }
-  candidates.sort(
-    (a, b) =>
-      a.path.localeCompare(b.path, 'en') ||
-      a.range.startLine - b.range.startLine ||
-      a.range.startColumn - b.range.startColumn ||
-      a.ruleId.localeCompare(b.ruleId, 'en'),
-  );
-  if (candidates.length > envelopeLimits.findings) {
-    candidates.length = envelopeLimits.findings;
-    partial ??= 'finding-limit';
-  }
-  const seen = new Map<string, number>();
-  const findings = candidates.map((c): AdapterFinding => {
-    const key = findingFingerprint('ruff', c);
-    const n = seen.get(key) ?? 0;
-    seen.set(key, n + 1);
-    return {
-      ...c,
-      fingerprint: n === 0 ? key : findingFingerprint('ruff', c, n),
-    };
-  });
-  return partial ? { findings, partial } : { findings };
+  return assembleFindings('ruff', candidates, partial);
 }
 
 /**

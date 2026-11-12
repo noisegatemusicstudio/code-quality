@@ -5,12 +5,12 @@ Evidence: synthetic
 Scope: Proves Ruff report parsing, the gate severity mapping, fixed isolated arguments, sha256 refusal and failure states by running a fake executable through runAdapter on synthetic Python sources, plus runEngines reporting mypy as skipped; does not run the real ruff or mypy binaries (the pull request's quality scan job does).
 */
 import assert from 'node:assert/strict';
-import { createHash } from 'node:crypto';
 import { execFileSync } from 'node:child_process';
-import { access, chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { writeFakeExecutable } from './fake-executable.js';
 import { runAdapter } from '../src/scanner-adapter.js';
 import {
   createRuffAdapter,
@@ -61,8 +61,7 @@ const entry = (
 // The fake exits 3 unless it receives exactly the reviewed arguments, so it
 // also proves the bundled isolated config is what is passed.
 const expectedArgs = createRuffAdapter('/x').fixedArgs;
-const fakeSource = `#!${process.execPath}
-const fs = require('node:fs');
+const fakeBody = `const fs = require('node:fs');
 const args = process.argv.slice(2);
 fs.writeFileSync(${JSON.stringify(marker)}, 'ran');
 const mode = fs.readFileSync(${JSON.stringify(modeFile)}, 'utf8').trim();
@@ -81,10 +80,9 @@ if (mode === 'crash') { process.exit(2); }
 if (mode === 'garbage') { console.log('not json'); process.exit(0); }
 console.log('[]');
 `;
-const executable = join(dir, 'fake-ruff');
-await writeFile(executable, fakeSource);
-await chmod(executable, 0o755);
-const fakeSha = createHash('sha256').update(fakeSource).digest('hex');
+const fake = await writeFakeExecutable(dir, 'fake-ruff', fakeBody);
+const executable = fake.path;
+const fakeSha = fake.sha256;
 const mode = (value: string) => writeFile(modeFile, value);
 const ran = () =>
   access(marker).then(
@@ -182,12 +180,15 @@ await test(
   'ruff internal errors and garbage output fail the engine',
   linux,
   async () => {
-    await mode('crash');
-    assert.equal((await scan({ 'a.py': clean })).status, 'failed');
-    await mode('garbage');
-    const envelope = await scan({ 'a.py': clean });
-    assert.equal(envelope.status, 'failed');
-    assert.equal(envelope.reason, 'invalid-output');
+    for (const [value, reason] of [
+      ['crash', 'engine-error'],
+      ['garbage', 'invalid-output'],
+    ] as const) {
+      await mode(value);
+      const envelope = await scan({ 'a.py': clean });
+      assert.equal(envelope.status, 'failed', value);
+      assert.equal(envelope.reason, reason, value);
+    }
   },
 );
 

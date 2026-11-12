@@ -25,7 +25,10 @@
     "./coverage-import": "./dist/src/coverage-import.js",
     "./customer-scan": "./dist/src/customer-scan.js",
     "./adapter-envelope": "./dist/src/adapter-envelope.js",
-    "./scanner-adapter": "./dist/src/scanner-adapter.js"
+    "./scanner-adapter": "./dist/src/scanner-adapter.js",
+    "./quality-measures": "./dist/src/quality-measures.js",
+    "./coverage-detail": "./dist/src/coverage-detail.js",
+    "./duplication": "./dist/src/duplication.js"
   },
   "scripts": {
     "build": "tsc && node dist/src/build-assets.js",

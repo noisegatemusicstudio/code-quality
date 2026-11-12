@@ -179,6 +179,56 @@ Future work, out of scope here: authenticated, idempotent central upload;
 recorded redistribution and hosted-use approvals per engine; network-enforced
 isolation; baseline comparison of fingerprints across runs.
 
+## Coverage and duplication measures
+
+Three exports report coverage and duplication with provenance. None of them runs
+customer tests, downloads jscpd or produces a maintainability/security rating,
+technical-debt estimate or composite score (`measuresNotProvided` lists them).
+
+- `/coverage-detail`: `parseCoverageDetail(raw, format, context)` imports
+  Istanbul `json-summary` (counts only) or `coverage-final` (adds per-line and
+  per-branch hits, needed for new-code coverage). It keeps exact line and branch
+  numerators/denominators per file and maps the report to a `commitSha` plus an
+  exact file set. The report carries no commit, so the caller supplies
+  `reportCommitSha`; it must equal `commitSha`. Gitignore-style `exclusions` and a
+  `renames` map (report path to current path) apply before matching.
+- `/duplication`: `jscpdAdapter(executable)` is a `runAdapter` definition (jscpd
+  5.4.3, strict mode, 5 lines/50 tokens, no gitignore, empty caller allowlist;
+  each clone becomes two findings, one per side). `parseJscpdReport` reads a
+  recorded jscpd JSON report: clone locations on both sides, per-file line counts,
+  totals, exclusions and the pinned config. The numerator is distinct duplicated
+  lines, which can be lower than jscpd's own `duplicatedLines` (it sums clone
+  sizes).
+- `/quality-measures`: `buildQualityMeasures`, `newCodeMeasures`,
+  `overallMeasures` and `evaluateThreshold` produce the typed, versioned
+  (`schemaVersion: 1`) output.
+
+Report states are explicit and never become a percentage by accident: `missing`
+(nothing supplied), `unsupported` (not the declared Istanbul/jscpd shape, for
+example lcov), `invalid` (malformed or inconsistent numbers), `stale` (report
+commit differs), `unmatched` (report names files outside the file set), `partial`
+(in-scope files absent) and `complete`. A complete report with 0 covered lines is
+0%, which is different from every other state. A measure is `known` (numerator,
+denominator, percent) or `unknown` with a reason; zero denominators are `unknown`.
+`evaluateThreshold` returns `pass`, `fail` or `unknown`, so unknown never passes.
+
+New-code measures take an explicit `referenceCommitSha`, the head commit and a
+supplied `ChangedLinesDiff` (head-side added/changed lines per file; the diff base
+must equal the reference). Coverage uses executable changed lines and changed
+branch locations; a `json-summary` report, a stale or partial report, a changed
+file missing from the report or a diff that does not match is `unknown`. Exclude
+files such as tests by pattern. Duplication counts changed lines inside files
+jscpd analyzed; changed lines in other files are reported as `unanalyzedLines`,
+and a changed line beyond an analyzed file's length is a `diff-mismatch`.
+
+Limits: coverage and duplication data are unverified customer inputs. jscpd covers
+its supported formats only, finds token-level (not semantic) clones, skips files
+below its thresholds, and has no generated-code detection: exclude generated code
+by pattern, or it counts. A `jscpd: ignore` marker in source limits what a real
+scan covers. Istanbul exclusions applied at collection time are invisible in the
+report. The adapter's `parse` expects the JSON report on stdout, but jscpd's JSON
+reporter writes a file, and that wiring was not verified against a real jscpd.
+
 ## Reviewed consumer adoption
 
 Pin an approved immutable Git SHA. Declare ESLint, Prettier, Husky, lint-staged, jiti and TypeScript directly at this package's exact versions; preserve lockfiles and never depend on transitive binary hoisting.

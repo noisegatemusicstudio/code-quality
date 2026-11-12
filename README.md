@@ -555,3 +555,10 @@ Known limits: Gitleaks and jscpd use the
 committed-snapshot API, so they need a full-history checkout, Git 2.47 or newer,
 and stay within its size bounds (otherwise they report `failed`). A project's own
 ESLint config is ignored; the bundled rules run instead.
+
+## Language profiles and default gate
+
+`docs/language-profiles.md` lists the industry-standard tool per language, the
+default quality gate (`gates/default.json`, read by `quality-scan-cli run`) and
+the follow-up slices. Languages without an engine are reported as
+`skipped: no engine yet`, never as clean.

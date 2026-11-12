@@ -207,7 +207,7 @@ await test('exceptions file parsing fails closed on anything but a gitleaks arra
 });
 
 await test('OSV envelope merge: worst status wins and findings concatenate', () => {
-  const ok = gitleaksResult('a.ts').envelope as AdapterEnvelope;
+  const ok = gitleaksResult('a.ts').envelope!;
   const skippedEnvelope: AdapterEnvelope = {
     ...ok,
     status: 'skipped',

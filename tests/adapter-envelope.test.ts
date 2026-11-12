@@ -534,7 +534,9 @@ await test(
     assert.deepEqual([early.status, early.reason], ['skipped', 'cancelled']);
     const live = new AbortController();
     const pending = run('hang', { signal: live.signal, timeoutMs: 60000 });
-    setTimeout(() => live.abort(), 400);
+    setTimeout(() => {
+      live.abort();
+    }, 400);
     const started = Date.now();
     const r = await pending;
     assert.deepEqual(

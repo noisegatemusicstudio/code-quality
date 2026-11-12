@@ -435,7 +435,9 @@ await test(
   async () => {
     const controller = new AbortController();
     const pending = scan({}, image('hang'), controller.signal);
-    setTimeout(() => controller.abort(), 400);
+    setTimeout(() => {
+      controller.abort();
+    }, 400);
     const r = await pending;
     assert.deepEqual(
       [

@@ -123,7 +123,7 @@ export async function runScannerProcess(
     };
     const onAbort = () => {
       cancelled = true;
-      if (!oversized && child.connected) child.send('stop', () => {});
+      if (!oversized && child.connected) child.send('stop', () => undefined);
     };
     request.signal?.addEventListener('abort', onAbort, { once: true });
     if (request.signal?.aborted) onAbort();
@@ -159,12 +159,16 @@ export async function runScannerProcess(
     const receive = (chunk: Buffer, stdout: boolean) => {
       size += chunk.length;
       if (size > request.outputLimit) {
-        if (!oversized && child.connected) child.send('stop', () => {});
+        if (!oversized && child.connected) child.send('stop', () => undefined);
         oversized = true;
       } else if (stdout && !oversized) chunks.push(chunk);
     };
-    child.stdout?.on('data', (chunk: Buffer) => receive(chunk, true));
-    child.stderr?.on('data', (chunk: Buffer) => receive(chunk, false));
+    child.stdout?.on('data', (chunk: Buffer) => {
+      receive(chunk, true);
+    });
+    child.stderr?.on('data', (chunk: Buffer) => {
+      receive(chunk, false);
+    });
     child.on('error', () => {
       if (child.pid === undefined) supervisorExited = true;
       result = { state: 'failed' };
@@ -173,10 +177,18 @@ export async function runScannerProcess(
       supervisorExited = true;
     });
     child.on('close', (_code, signal) => {
-      if (result === undefined || signal !== 'SIGKILL')
-        return finish({ state: 'cleanup-uncertain' });
-      if (cancelled) return finish({ state: 'cancelled' });
-      if (oversized) return finish({ state: 'output-limit' });
+      if (result === undefined || signal !== 'SIGKILL') {
+        finish({ state: 'cleanup-uncertain' });
+        return;
+      }
+      if (cancelled) {
+        finish({ state: 'cancelled' });
+        return;
+      }
+      if (oversized) {
+        finish({ state: 'output-limit' });
+        return;
+      }
       finish(
         result.state === 'exited'
           ? { ...result, stdout: Buffer.concat(chunks) }

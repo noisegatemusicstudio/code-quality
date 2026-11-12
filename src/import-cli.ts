@@ -52,11 +52,16 @@ async function envelope(flags: string[]): Promise<void> {
       index < 0 ||
       !names.includes(name) ||
       values.has(name)
-    )
-      return fail();
+    ) {
+      fail();
+      return;
+    }
     values.set(name, flag.slice(index + 1));
   }
-  if (names.some((n) => !values.has(n))) return fail();
+  if (names.some((n) => !values.has(n))) {
+    fail();
+    return;
+  }
   const get = (n: string): string => values.get(n) ?? '';
   try {
     const result = parseEslintFindings(await readStdin(), {
@@ -72,7 +77,10 @@ async function envelope(flags: string[]): Promise<void> {
       configVersion: get('config-version'),
       pathRoot: get('path-root'),
     });
-    if (result.status !== 'parsed') return fail();
+    if (result.status !== 'parsed') {
+      fail();
+      return;
+    }
     process.exitCode = 0;
     process.stdout.write(JSON.stringify(result.envelope) + '\n');
   } catch {

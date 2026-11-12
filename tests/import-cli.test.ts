@@ -163,7 +163,9 @@ await test('CLI closed stdout fails quietly without stack or path leakage', asyn
     signal: string | null;
   }>((resolve, reject) => {
     child.on('error', reject);
-    child.on('close', (code, signal) => resolve({ code, signal }));
+    child.on('close', (code, signal) => {
+      resolve({ code, signal });
+    });
   });
   assert.deepEqual(result, { code: 2, signal: null });
   assert.equal(stderr, '');

@@ -73,7 +73,7 @@ const known = (
         state: 'known',
         numerator: r.covered,
         denominator: r.total,
-        percent: percent(r) as number,
+        percent: percent(r)!,
         ...extra,
       };
 const unknown = (
@@ -108,7 +108,7 @@ export function overallMeasures(
     if (!coverage) out.push(unknown(id, 'overall', 'no-report'));
     else if (coverage.state !== 'complete')
       out.push(unknown(id, 'overall', stateReason(coverage.state)));
-    else out.push(known(id, 'overall', pick(coverage) as Ratio));
+    else out.push(known(id, 'overall', pick(coverage)!));
   }
   if (!duplication)
     out.push(unknown('duplication.lines', 'overall', 'no-report'));

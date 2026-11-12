@@ -127,8 +127,8 @@ default `high` equals the gate's.
 Every run lists the languages found with file counts. A language without a
 language-aware engine is reported as `skipped: no engine yet`, in both
 `summary.md` and `report.json` (`languages`). Today only TypeScript and
-JavaScript (ESLint, Semgrep), Dockerfile and Terraform (Trivy) count as
-covered; gitleaks, OSV and jscpd are language-agnostic and not counted.
+JavaScript (ESLint, Semgrep), Dockerfile (Trivy, hadolint), Terraform (Trivy,
+tflint), YAML (yamllint) and Markdown (markdownlint) count as covered; gitleaks, OSV and jscpd are language-agnostic and not counted.
 
 ## 5. Jira mapping
 
@@ -145,12 +145,12 @@ covered; gitleaks, OSV and jscpd are language-agnostic and not counted.
 2. Python: Ruff and mypy adapters (RRDSCRUM-187).
 3. Shell: ShellCheck and shfmt (RRDSCRUM-188).
 4. GitHub Actions: actionlint and zizmor (cheap, MIT, we already ship workflows).
-5. Dockerfile: hadolint (GPL, internal runs first).
-6. Terraform: tflint beside Trivy.
+5. Dockerfile: hadolint (GPL, internal runs first). **Done.**
+6. Terraform: tflint beside Trivy. **Done** (bundled terraform ruleset, no plugins).
 7. Kotlin: detekt and ktlint (RRDSCRUM-186).
 8. Java: PMD, Checkstyle, SpotBugs + FindSecBugs (RRDSCRUM-185; needs a build).
 9. Swift: SwiftLint (needs a Swift runner).
-10. YAML and Markdown: yamllint and markdownlint.
+10. YAML and Markdown: yamllint and markdownlint. **Done.**
 11. Prettier check as an engine for TS/JS and the formats above.
 12. New-code coverage and duplication measures wired into the gate, then flip
     `onUnknown` to `fail`.

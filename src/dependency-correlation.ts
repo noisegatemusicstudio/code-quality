@@ -26,6 +26,8 @@ export interface DependencyCorrelation {
   bySource: Record<string, number>;
 }
 
+const byText = (a: string, b: string): number => a.localeCompare(b);
+
 /** Ecosystem key: case-insensitive, without OSV's `:release` suffix. */
 const ecosystemKey = (e: string): string =>
   (e.split(':')[0] ?? e).toLowerCase();
@@ -78,8 +80,8 @@ export function correlateDependencyFindings(
       if (!first) continue;
       issues.push({
         package: { ...first.package },
-        advisoryIds: [...new Set(cluster.flatMap((c) => c.ids))].sort(),
-        sources: [...new Set(cluster.map((c) => c.source))].sort(),
+        advisoryIds: [...new Set(cluster.flatMap((c) => c.ids))].sort(byText),
+        sources: [...new Set(cluster.map((c) => c.source))].sort(byText),
         occurrences: cluster
           .map((c) => ({
             source: c.source,
@@ -92,7 +94,7 @@ export function correlateDependencyFindings(
           ),
         fixedVersions: [
           ...new Set(cluster.flatMap((c) => c.finding.fixedVersions)),
-        ].sort(),
+        ].sort(byText),
       });
     }
   }

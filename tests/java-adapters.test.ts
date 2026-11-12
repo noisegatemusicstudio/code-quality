@@ -614,14 +614,15 @@ await test('Java files without the engines installed fail, never pass; SpotBugs 
     assert.equal(byEngine.get('pmd')?.status, 'failed');
     assert.equal(byEngine.get('checkstyle')?.status, 'failed');
     const spotbugs = byEngine.get('spotbugs');
-    assert.equal(spotbugs?.status, 'skipped');
-    assert.equal(spotbugs?.skipKind, 'unavailable');
-    assert.match(spotbugs?.reason ?? '', /^requires compiled classes/);
-    assert.equal(spotbugs?.reason, spotbugsPin.skipReason);
-    assert.equal(spotbugs?.version, spotbugsPin.version);
-    assert.deepEqual(spotbugs?.findings, []);
-    assert.equal(spotbugs?.envelope, undefined);
-    assert.notEqual(spotbugs?.status, 'completed');
+    assert.ok(spotbugs);
+    assert.equal(spotbugs.status, 'skipped');
+    assert.equal(spotbugs.skipKind, 'unavailable');
+    assert.match(spotbugs.reason ?? '', /^requires compiled classes/);
+    assert.equal(spotbugs.reason, spotbugsPin.skipReason);
+    assert.equal(spotbugs.version, spotbugsPin.version);
+    assert.deepEqual(spotbugs.findings, []);
+    assert.equal(spotbugs.envelope, undefined);
+    assert.notEqual(spotbugs.status, 'completed');
   } finally {
     await rm(repo, { recursive: true, force: true });
   }

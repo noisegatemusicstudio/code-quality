@@ -196,10 +196,10 @@ function xmlDecode(text: string): string {
     },
   );
 }
-function xmlAttributes(source: string): Record<string, string> {
-  const out: Record<string, string> = {};
+function xmlAttributes(source: string): Partial<Record<string, string>> {
+  const out: Partial<Record<string, string>> = {};
   for (const m of source.matchAll(/([A-Za-z_:][\w:.-]*)="([^"]*)"/g))
-    out[m[1] ?? ''] = xmlDecode(m[2] ?? '');
+    out[m[1]] = xmlDecode(m[2]);
   return out;
 }
 const checkstyleSeverities = new Set(['error', 'warning', 'info']);
@@ -235,7 +235,7 @@ export function parseCheckstyleXml(
       file = undefined;
     } else if (token[0].startsWith('<file')) {
       files += 1;
-      const name = xmlAttributes(token[1] ?? '').name ?? '';
+      const name = xmlAttributes(token[1]).name ?? '';
       file = relativeSourcePath(name, sourceRoot);
       if (!isSafeRelativePath(file)) {
         partial ??= 'path-outside-root';
@@ -245,7 +245,7 @@ export function parseCheckstyleXml(
     } else {
       errors += 1;
       const found = file
-        ? checkstyleError(xmlAttributes(token[3] ?? ''), file)
+        ? checkstyleError(xmlAttributes(token[3]), file)
         : undefined;
       if (found) candidates.push(found);
       else partial ??= 'invalid-output';
@@ -259,7 +259,7 @@ export function parseCheckstyleXml(
 }
 
 function checkstyleError(
-  attributes: Record<string, string>,
+  attributes: Partial<Record<string, string>>,
   path: string,
 ): Candidate | undefined {
   const severity = attributes.severity ?? '';

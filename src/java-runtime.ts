@@ -47,7 +47,7 @@ export function resolveJava(
     (environment.JAVA_HOME ? join(environment.JAVA_HOME, 'bin', 'java') : '');
   if (!candidate || !isAbsolute(candidate) || candidate.includes('\0'))
     return {
-      error: `no Java ${jdkMajor} runtime: pass --java or set JAVA_HOME (the workflow uses actions/setup-java)`,
+      error: `no Java ${String(jdkMajor)} runtime: pass --java or set JAVA_HOME (the workflow uses actions/setup-java)`,
     };
   return isFile(candidate)
     ? { java: candidate }

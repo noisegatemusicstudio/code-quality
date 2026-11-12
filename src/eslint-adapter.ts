@@ -22,7 +22,16 @@ export const approvedVersions = Object.freeze({
   typescriptEslint: '8.72.1',
 });
 export const eslintConfigVersion = 'bundled-1';
-const supportedExtensions = ['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts'];
+export const supportedExtensions = [
+  '.js',
+  '.mjs',
+  '.cjs',
+  '.jsx',
+  '.ts',
+  '.mts',
+  '.cts',
+  '.tsx',
+];
 const excluded =
   /(?:(?:^|\/)(?:node_modules|dist|build|coverage|vendor)\/|\.min\.js$)/;
 /** Customer ESLint configuration is never executed; its presence is refused. */

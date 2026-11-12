@@ -32,6 +32,14 @@ on:
         description: Optional repo-relative path of a previous report.json for the new-vs-baseline split.
         type: string
         default: ''
+      base-ref:
+        description: 'Baseline ref for new-code measures on pushes (pull requests use their base SHA). Empty: new-code measures are unknown on pushes.'
+        type: string
+        default: ''
+      coverage-report:
+        description: 'Optional repo-relative path of an Istanbul coverage-final.json produced by the caller; the scan never runs tests. Empty: coverage is unknown.'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -47,6 +55,8 @@ jobs:
       CQ_FAIL_ON: ${{ inputs.fail-on-severity }}
       CQ_BASELINE: ${{ inputs.baseline-path }}
       CQ_OSV_MODE: ${{ inputs.osv-mode }}
+      CQ_BASE_REF: ${{ inputs.base-ref }}
+      CQ_COVERAGE: ${{ inputs.coverage-report }}
     steps:
       - name: Require a full-SHA code-quality-ref
         run: |
@@ -115,6 +125,8 @@ jobs:
           # markdownlint-cli2 comes from the package-lock.json (integrity-checked) install above.
           args+=(--markdownlint-cli2 "$GITHUB_WORKSPACE/.quality-tool/node_modules/markdownlint-cli2/markdownlint-cli2-bin.mjs")
           if [ -n "$CQ_BASELINE" ]; then args+=(--baseline "$CQ_BASELINE"); fi
+          if [ -n "$CQ_BASE_REF" ]; then args+=(--base-ref "$CQ_BASE_REF"); fi
+          if [ -n "$CQ_COVERAGE" ]; then args+=(--coverage "$GITHUB_WORKSPACE/$CQ_COVERAGE"); fi
           node .quality-tool/dist/src/quality-scan-cli.js "${args[@]}"
         env:
           SEMGREP_BIN: ${{ steps.semgrep.outputs.bin }}

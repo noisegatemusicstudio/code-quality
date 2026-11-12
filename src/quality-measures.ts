@@ -38,6 +38,7 @@ export type UnknownReason =
   | 'zero-denominator'
   | 'no-line-data'
   | 'invalid-reference'
+  | 'no-base-ref'
   | 'diff-mismatch'
   | 'changed-file-not-in-report';
 export interface KnownMeasure {

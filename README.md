@@ -211,6 +211,42 @@ Future work, out of scope here: authenticated, idempotent central upload;
 recorded redistribution and hosted-use approvals per engine; network-enforced
 isolation; baseline comparison of fingerprints across runs.
 
+### OSV dependency-vulnerability adapter
+
+`runOsvScan` (`/osv-adapter`) runs the pinned OSV-Scanner (2.7.1, Apache-2.0)
+through `runAdapter` on **one** lockfile (`package-lock.json`, `yarn.lock`,
+`pnpm-lock.yaml`, `requirements.txt`, `poetry.lock`, `Pipfile.lock`,
+`Gemfile.lock`, `Cargo.lock`, `go.mod`, `composer.lock`, `pom.xml`) or SBOM
+(`*.cdx.json`, `*.spdx.json`). Select the artefact by repository-relative path;
+anything else is `skipped`. Only `scan source --format json` plus one allowlisted
+`-L <file>` or `--sbom <file>` argument is executed: no installs or lifecycle
+scripts. Pass the trusted binary path and its exact `--version` output.
+
+Each `DependencyFinding` has explicit `artefactPath`, `package`
+(`name`/`version`/`ecosystem`), `advisory` (`id`, `aliases`), `affectedRanges`
+and `fixedVersions` (empty means no fix is known), plus the `fingerprint` of the
+matching envelope finding (`ruleId` is the advisory id). Aliases (GHSA/CVE) of the
+same package, version and path are merged; different versions or paths never are.
+
+- **Online (default).** Customer-run. Package names, versions and ecosystems
+  are sent to the OSV API; `disclosure.transmitted` says so. This code does not
+  enforce the network boundary; pass `networkAvailable: false` when it is known
+  to be denied and the run is `skipped`.
+- **Offline (opt-in).** Needs `databaseTimestamp` (ISO-8601) and refuses data
+  older than `maxDatabaseAgeDays` (default 7) or dated in the future. The
+  timestamp is disclosed and appears in `rulesetVersion` (`osv-db-YYYYMMDD`).
+  Refresh the database before scans. Bundling or hosting database copies needs
+  separate clearance (`docs/scanner-licensing.md`). Where the scanner finds its
+  database is its own default; that, and the `--offline` flag, are unverified
+  against a real binary because tests never download or run it.
+- The shared reason enum has no network/stale/unsupported values, so those cases
+  are `skipped` with `invalid-request`; the precise cause is `disclosure.outcome`
+  (`unsupported-artefact`, `network-denied`, `stale-database`,
+  `database-timestamp-missing`).
+
+A clean result does not guarantee the absence of unknown vulnerabilities; it
+means no known advisory in the consulted data matched.
+
 ## Reviewed consumer adoption
 
 Pin an approved immutable Git SHA. Declare ESLint, Prettier, Husky, lint-staged, jiti and TypeScript directly at this package's exact versions; preserve lockfiles and never depend on transitive binary hoisting.

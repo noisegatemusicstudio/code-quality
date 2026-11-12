@@ -1,7 +1,5 @@
 {
   "permissions": {
-    "allow": [
-      "mcp__Atlassian_MCP__addOrEditJiraIssueComment"
-    ]
+    "allow": ["mcp__Atlassian_MCP__addOrEditJiraIssueComment"]
   }
 }

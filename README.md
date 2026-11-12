@@ -123,6 +123,62 @@ source, 1000 source files and 1 MiB per source file. Shallow repositories,
 alternates and linked-worktree object stores are unsupported. Keep local request
 files, advisory archives and raw reports out of public commits.
 
+## Scanner adapter result envelope
+
+The `/adapter-envelope` export defines schema version 1 of a bounded result
+envelope, and `validateEnvelope` checks it at runtime (unknown keys, oversize
+input and inconsistent states fail closed). An envelope carries `tenantId`,
+`projectId`, `repository`, the 40-character lowercase `commitSha`, `sourceId`,
+`jobId`, `attemptId`, the engine id and version, `rulesetVersion`,
+`configVersion`, a `provenance` (`adapter-executed` or `imported-unverified`), a
+`status` and per-finding records. Each finding keeps the engine-native `ruleId`
+and `nativeSeverity`, a repository-relative `path` with a line/column range, a
+`sha256:` fingerprint and a redacted message of at most 300 characters.
+
+Status is `completed`, `failed`, `skipped` or `incomplete`. Everything except
+`completed` requires a `reason`; `failed` and `skipped` carry no findings, and
+`incomplete` may carry the partial findings it has. Dropped or truncated results
+are never reported as `completed`. Limits: 1 MiB of JSON, 5000 findings. Pass the
+expected scope to `validateEnvelope` to deny any record for another tenant,
+project, repository, commit, source, job or attempt. Redaction is best-effort, and
+fingerprints change when a line moves; cross-run comparison belongs to a later
+layer. The envelope is unauthenticated data, not proof of a scan.
+
+### Detailed ESLint import
+
+`parseEslintFindings` (`/eslint-import`) turns the same ESLint 10.13.0 JSON report
+into an envelope with `imported-unverified` provenance after `parseEslintJson`
+has validated the counts, which are unchanged. File paths must be inside the
+supplied absolute `pathRoot`; others are dropped and the envelope is `incomplete`.
+Suppressed messages, source text and fixes are discarded.
+
+```sh
+node dist/src/import-cli.js eslint-envelope "$COMMIT_SHA" \
+  --tenant-id=t --project-id=p --repository=owner/name --source-id=s \
+  --job-id=j --attempt-id=a --engine-version=10.13.0 \
+  --ruleset-version=r1 --config-version=c1 --path-root="$PWD" < eslint-report.json
+```
+
+### Adapter interface
+
+`runAdapter` (`/scanner-adapter`) runs a `ScannerAdapter` and returns a validated
+envelope. An adapter declares a trusted absolute executable, the pinned engine
+version (checked by running `versionArgs` and comparing exact output before any
+scan), fixed arguments, an exact-match allowlist for caller arguments, accepted
+exit codes and a parser. Package managers and shells are rejected as executables.
+Files are written to a private temporary workspace that is always removed.
+Requests have a timeout of at most 120 seconds, a 4 MiB output limit and an
+`AbortSignal`: cancelling stops the whole process group and reports
+`incomplete`/`cancelled` with no findings. The scrubbed environment carries no
+credentials, proxy variables or `PATH`, and the adapter never installs packages
+or runs lifecycle scripts. This is not a hostile-code or network-enforced sandbox:
+the engine must be trusted, and the Linux-only supervisor applies as in
+committed-source scans.
+
+Future work, out of scope here: authenticated, idempotent central upload;
+recorded redistribution and hosted-use approvals per engine; network-enforced
+isolation; baseline comparison of fingerprints across runs.
+
 ## Reviewed consumer adoption
 
 Pin an approved immutable Git SHA. Declare ESLint, Prettier, Husky, lint-staged, jiti and TypeScript directly at this package's exact versions; preserve lockfiles and never depend on transitive binary hoisting.

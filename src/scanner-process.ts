@@ -7,6 +7,8 @@ export interface ProcessRequest {
   cwd: string;
   timeoutMs: number;
   outputLimit: number;
+  /** Optional caller cancellation: stops the whole supervised group. */
+  signal?: AbortSignal;
 }
 export type ProcessOutcome =
   | { state: 'exited'; code: number; stdout: Buffer }
@@ -16,6 +18,7 @@ export type ProcessOutcome =
         | 'timed-out'
         | 'output-limit'
         | 'unsupported'
+        | 'cancelled'
         | 'cleanup-uncertain';
     };
 
@@ -62,6 +65,7 @@ export async function runScannerProcess(
     request.outputLimit > 16777216
   )
     return { state: 'failed' };
+  if (request.signal?.aborted) return { state: 'cancelled' };
   return new Promise((resolve) => {
     const child = spawn(
       process.execPath,
@@ -100,6 +104,7 @@ export async function runScannerProcess(
     let result: ProcessOutcome | undefined;
     let size = 0;
     let oversized = false;
+    let cancelled = false;
     let settled = false;
     let supervisorExited = false;
     const chunks: Buffer[] = [];
@@ -107,11 +112,18 @@ export async function runScannerProcess(
       if (settled) return;
       settled = true;
       clearTimeout(timer);
+      request.signal?.removeEventListener('abort', onAbort);
       child.stdout?.destroy();
       child.stderr?.destroy();
       if (child.connected) child.disconnect();
       resolve(outcome);
     };
+    const onAbort = () => {
+      cancelled = true;
+      if (!oversized && child.connected) child.send('stop', () => {});
+    };
+    request.signal?.addEventListener('abort', onAbort, { once: true });
+    if (request.signal?.aborted) onAbort();
     const timer = setTimeout(() => {
       // No group kill here. A broken supervisor is explicitly uncertain.
       if (!supervisorExited) child.kill('SIGKILL');
@@ -160,6 +172,7 @@ export async function runScannerProcess(
     child.on('close', (_code, signal) => {
       if (result === undefined || signal !== 'SIGKILL')
         return finish({ state: 'cleanup-uncertain' });
+      if (cancelled) return finish({ state: 'cancelled' });
       if (oversized) return finish({ state: 'output-limit' });
       finish(
         result.state === 'exited'

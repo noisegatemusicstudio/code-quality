@@ -23,7 +23,9 @@
     "./scan-report": "./dist/src/scan-report.js",
     "./eslint-import": "./dist/src/eslint-import.js",
     "./coverage-import": "./dist/src/coverage-import.js",
-    "./customer-scan": "./dist/src/customer-scan.js"
+    "./customer-scan": "./dist/src/customer-scan.js",
+    "./adapter-envelope": "./dist/src/adapter-envelope.js",
+    "./scanner-adapter": "./dist/src/scanner-adapter.js"
   },
   "scripts": {
     "build": "tsc && node dist/src/build-assets.js",

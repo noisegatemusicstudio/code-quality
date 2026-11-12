@@ -1,5 +1,5 @@
 import { aggregateScanReport } from './scan-report.js';
-import { parseEslintJson } from './eslint-import.js';
+import { parseEslintFindings, parseEslintJson } from './eslint-import.js';
 import { parseCoverageSummary } from './coverage-import.js';
 
 // Usage: node dist/src/import-cli.js aggregate|eslint|coverage <declared-commit>
@@ -13,6 +13,77 @@ const [command, commitSha] = args;
 process.stdout.on('error', () => {
   process.exitCode = 2;
 });
+
+async function readStdin(): Promise<string> {
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  for await (const chunk of process.stdin) {
+    if (!(chunk instanceof Uint8Array)) throw new Error();
+    size += chunk.byteLength;
+    if (size > 262144) throw new Error();
+    chunks.push(chunk);
+  }
+  return new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(
+    Buffer.concat(chunks),
+  );
+}
+
+// Detailed ESLint findings in the versioned adapter envelope. Scope is supplied
+// by flags only; exit 0 = parsed (even when the envelope is incomplete).
+async function envelope(flags: string[]): Promise<void> {
+  const names = [
+    'tenant-id',
+    'project-id',
+    'repository',
+    'source-id',
+    'job-id',
+    'attempt-id',
+    'engine-version',
+    'ruleset-version',
+    'config-version',
+    'path-root',
+  ];
+  const values = new Map<string, string>();
+  for (const flag of flags) {
+    const index = flag.indexOf('=');
+    const name = flag.slice(2, index);
+    if (
+      !flag.startsWith('--') ||
+      index < 0 ||
+      !names.includes(name) ||
+      values.has(name)
+    )
+      return fail();
+    values.set(name, flag.slice(index + 1));
+  }
+  if (names.some((n) => !values.has(n))) return fail();
+  const get = (n: string): string => values.get(n) ?? '';
+  try {
+    const result = parseEslintFindings(await readStdin(), {
+      tenantId: get('tenant-id'),
+      projectId: get('project-id'),
+      repository: get('repository'),
+      commitSha: commitSha,
+      sourceId: get('source-id'),
+      jobId: get('job-id'),
+      attemptId: get('attempt-id'),
+      engineVersion: get('engine-version'),
+      rulesetVersion: get('ruleset-version'),
+      configVersion: get('config-version'),
+      pathRoot: get('path-root'),
+    });
+    if (result.status !== 'parsed') return fail();
+    process.exitCode = 0;
+    process.stdout.write(JSON.stringify(result.envelope) + '\n');
+  } catch {
+    fail();
+  }
+}
+
+function fail(): void {
+  process.exitCode = 2;
+  process.stdout.write(JSON.stringify(invalid) + '\n');
+}
 
 async function main(): Promise<void> {
   if (args.length === 1 && command === '--help') {
@@ -34,6 +105,14 @@ async function main(): Promise<void> {
         },
       }) + '\n',
     );
+    return;
+  }
+  if (
+    command === 'eslint-envelope' &&
+    typeof commitSha === 'string' &&
+    args.length === 12
+  ) {
+    await envelope(args.slice(2));
     return;
   }
   if (

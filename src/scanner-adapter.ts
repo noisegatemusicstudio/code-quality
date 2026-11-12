@@ -65,6 +65,15 @@ export interface ScannerAdapter {
    * successful exit, and `parse` receives its content instead of stdout.
    */
   outputFile?: { path: string; maxBytes: number };
+  /**
+   * JVM engines: the process that actually runs is `runtime.executable` (the
+   * JDK's `java`) with `runtime.args` first, and `executable` is the pinned
+   * artifact those arguments point at. The literal argument `{engine}` is
+   * replaced by the verified private copy of `executable` (a jar), or by
+   * `executable` itself when it has no `executableSha256` (an installed
+   * distribution whose tree the caller verified).
+   */
+  runtime?: { executable: string; args: readonly string[] };
   /** Engine needs base tools (for example `uname`): run with a fixed system PATH. */
   systemPath?: boolean;
   /** Run before the scan; its trimmed stdout must equal `versionOutput`. */
@@ -101,9 +110,13 @@ export interface AdapterRequest {
 /** Check the adapter declaration itself; a bad adapter never executes. */
 function adapterProblem(adapter: ScannerAdapter): string | undefined {
   if (
-    !isAbsolute(adapter.executable) ||
-    adapter.executable.includes('\0') ||
-    forbiddenExecutables.has(basename(adapter.executable))
+    ![adapter.executable, adapter.runtime?.executable].every(
+      (path) =>
+        path === undefined ||
+        (isAbsolute(path) &&
+          !path.includes('\0') &&
+          !forbiddenExecutables.has(basename(path))),
+    )
   )
     return 'executable';
   if (
@@ -252,9 +265,21 @@ export async function runAdapter(
         recursive: true,
         mode: 0o700,
       });
+    // JVM engines run `java <runtime args> <engine args>`; others run the engine.
+    const launch = (args: readonly string[]) =>
+      adapter.runtime
+        ? {
+            executable: adapter.runtime.executable,
+            args: [
+              ...adapter.runtime.args.map((a) =>
+                a === '{engine}' ? executable : a,
+              ),
+              ...args,
+            ],
+          }
+        : { executable, args };
     const version = await runScannerProcess({
-      executable,
-      args: adapter.versionArgs,
+      ...launch(adapter.versionArgs),
       cwd: workspace,
       timeoutMs: Math.min(timeoutMs, 10000),
       outputLimit: 4096,
@@ -269,8 +294,7 @@ export async function runAdapter(
     )
       return build('failed', 'engine-version-mismatch');
     const run = await runScannerProcess({
-      executable,
-      args: [...adapter.fixedArgs, ...args],
+      ...launch([...adapter.fixedArgs, ...args]),
       cwd: source,
       timeoutMs,
       outputLimit: adapterLimits.stdoutBytes,

@@ -13,7 +13,7 @@ on:
         type: string
         default: 22.23.4
       scanners:
-        description: 'Comma list of eslint, gitleaks, osv, trivy, semgrep, jscpd, ruff, mypy, shellcheck, shfmt, actionlint, zizmor, hadolint, tflint, yamllint, markdownlint, or all (applicable engines only).'
+        description: 'Comma list of eslint, gitleaks, osv, trivy, semgrep, jscpd, ruff, mypy, pmd, checkstyle, spotbugs, shellcheck, shfmt, actionlint, zizmor, hadolint, tflint, yamllint, markdownlint, or all (applicable engines only).'
         type: string
         default: all
       code-quality-ref:
@@ -80,6 +80,13 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: ${{ inputs.node-version }}
+      # Shared by every JVM engine (Java: PMD, Checkstyle). The scan resolves
+      # `java` from JAVA_HOME (src/java-runtime.ts); add JVM engines here, not a second JDK step.
+      - name: Set up JDK for JVM engines
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Build the scanner tooling
         working-directory: .quality-tool
         run: |

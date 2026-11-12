@@ -5,6 +5,7 @@ import {
   isTerraformFile,
   isYamlFile,
 } from './lint-adapters.js';
+import { isJavaFile } from './java-adapters.js';
 import { renderLanguages, type LanguageReport } from './language-detection.js';
 
 /** Engines the reusable `quality-scan` workflow can run, in report order. */
@@ -17,6 +18,9 @@ export const engineIds = [
   'jscpd',
   'ruff',
   'mypy',
+  'pmd',
+  'checkstyle',
+  'spotbugs',
   'shellcheck',
   'shfmt',
   'actionlint',
@@ -146,6 +150,9 @@ export function detectApplicability(
       : no('no JavaScript or TypeScript files'),
     ruff: some((p) => pythonExtension.test(p)) ? yes : no('no Python files'),
     mypy: some((p) => pythonExtension.test(p)) ? yes : no('no Python files'),
+    pmd: some((p) => isJavaFile(p)) ? yes : no('no Java files'),
+    checkstyle: some((p) => isJavaFile(p)) ? yes : no('no Java files'),
+    spotbugs: some((p) => isJavaFile(p)) ? yes : no('no Java files'),
     shellcheck: some((p) => shellFile.test(p)) ? yes : no('no shell scripts'),
     shfmt: some((p) => shellFile.test(p)) ? yes : no('no shell scripts'),
     actionlint: some((p) => workflowFile.test(p))
@@ -210,10 +217,18 @@ export function normaliseSeverity(
   // Lint engines: errors are medium, warnings low, notices and style info.
   // markdownlint has no native levels (recorded as `error`), so it ranks low.
   if (engine === 'markdownlint') return label === 'error' ? 'low' : 'high';
-  if (engine === 'hadolint' || engine === 'tflint' || engine === 'yamllint') {
+  if (
+    engine === 'hadolint' ||
+    engine === 'tflint' ||
+    engine === 'yamllint' ||
+    engine === 'pmd' ||
+    engine === 'checkstyle'
+  ) {
+    // PMD reports SARIF levels (error, warning, note); Checkstyle error, warning, info.
     const lint: Record<string, Severity> = {
       error: 'medium',
       warning: 'low',
+      note: 'info',
       notice: 'info',
       info: 'info',
       style: 'info',

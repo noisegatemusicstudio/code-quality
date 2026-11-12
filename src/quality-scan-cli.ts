@@ -13,6 +13,7 @@ import {
 } from './quality-scan.js';
 import { buildManifest, ManifestError } from './quality-manifest.js';
 import { detectLanguages } from './language-detection.js';
+import { resolveJava } from './java-runtime.js';
 import { loadGate, decideWithGate, gateMeasuresFrom } from './quality-gate.js';
 import { computeNewCode, readCoverageReport } from './new-code.js';
 import {
@@ -172,6 +173,11 @@ async function run(args: string[]): Promise<number> {
   else
     errors.yamllint =
       option(args, 'yamllint-error') ?? 'yamllint not installed';
+  const java = resolveJava(option(args, 'java'), process.env);
+  if (java.java) tools.java = java.java;
+  else
+    for (const id of ['pmd', 'checkstyle'])
+      errors[id] ??= java.error ?? 'no Java runtime';
   const markdownlint = option(args, 'markdownlint-cli2');
   if (markdownlint) tools.markdownlint = resolve(markdownlint);
   else

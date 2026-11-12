@@ -184,3 +184,7 @@ A later ticket may add reusable Sonar workflows, secure pins, gate enforcement a
 Future PRs are regular PRs: DO NOT MERGE identifies blockers; Ready To Review requires exact-head verification. Owners review and merge.
 
 Sources: [ESLint](https://eslint.org/docs/latest/use/configure/configuration-files), [typescript-eslint](https://typescript-eslint.io/packages/typescript-eslint/), [lint-staged](https://github.com/lint-staged/lint-staged), [Husky](https://typicode.github.io/husky/how-to.html).
+
+## Scanner licensing
+
+Licence, redistribution and hosted-use review of candidate scanners (RRDSCRUM-61): [docs/scanner-licensing.md](docs/scanner-licensing.md).

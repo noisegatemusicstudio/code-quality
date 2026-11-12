@@ -8,10 +8,11 @@ import {
   findingFingerprint,
   isSafeRelativePath,
 } from './adapter-envelope.js';
+import { externalPins } from './scanner-pins.js';
 import type { ParsedOutput, ScannerAdapter } from './scanner-adapter.js';
 
 /** Pinned, approved Gitleaks CLI (MIT). gitleaks-action is never used. */
-export const gitleaksVersion = '8.30.1';
+export const gitleaksVersion = externalPins.gitleaks.version;
 export const gitleaksConfigVersion = `reviewed-config-${gitleaksVersion}`;
 
 export type GitleaksMode = 'working-tree' | 'commit-range';
@@ -23,6 +24,11 @@ export interface GitleaksOptions {
    * repository can never supply (or broaden) its own `.gitleaks.toml`.
    */
   configPath: string;
+  /**
+   * SHA-256 the executable must match. Defaults to the pinned
+   * `externalPins.gitleaks.sha256`; override only for a fake in tests.
+   */
+  executableSha256?: string;
   /** Trusted ignore file/dir; passed explicitly so a repo `.gitleaksignore` is not read. */
   ignorePath: string;
   mode: GitleaksMode;
@@ -70,6 +76,8 @@ const line = (v: unknown): number | undefined =>
 export function parseGitleaksReport(
   stdout: string,
   incompleteHistory = false,
+  /** Absolute scan root to strip when the engine reports absolute paths. */
+  pathRoot?: string,
 ): ParsedOutput | undefined {
   const root: unknown = JSON.parse(stdout);
   if (!Array.isArray(root)) return undefined;
@@ -87,7 +95,11 @@ export function parseGitleaksReport(
     )
       return undefined;
     const file = typeof item.File === 'string' ? item.File : undefined;
-    const rel = file?.startsWith('./') ? file.slice(2) : file;
+    const stripped =
+      pathRoot && file?.startsWith(`${pathRoot}/`)
+        ? file.slice(pathRoot.length + 1)
+        : file;
+    const rel = stripped?.startsWith('./') ? stripped.slice(2) : stripped;
     if (
       rel === undefined ||
       rel.length > fileMax ||
@@ -213,6 +225,8 @@ export function createGitleaksAdapter(
       rulesetVersion: `default-${gitleaksVersion}`,
       configVersion: gitleaksConfigVersion,
       executable: options.executable,
+      executableSha256:
+        options.executableSha256 ?? externalPins.gitleaks.sha256,
       versionArgs: ['version'],
       versionOutput: gitleaksVersion,
       fixedArgs,

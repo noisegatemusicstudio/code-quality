@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { basename, dirname, isAbsolute, join } from 'node:path';
@@ -13,6 +14,7 @@ import {
   isValidScope,
   validateEnvelope,
 } from './adapter-envelope.js';
+import { readBoundedRegular } from './external-scanners.js';
 import { runScannerProcess } from './scanner-process.js';
 
 /** Package managers and installers are never adapter executables. */
@@ -36,6 +38,7 @@ export const adapterLimits = Object.freeze({
   files: 1000,
   fileBytes: 1048576,
   totalBytes: 16777216,
+  executableBytes: 67108864,
   args: 32,
   argChars: 256,
 });
@@ -47,6 +50,21 @@ export interface ScannerAdapter {
   configVersion: string;
   /** Trusted absolute path to the pinned engine executable. */
   executable: string;
+  /**
+   * Optional lowercase hex SHA-256 of the executable. When set, the file is
+   * read once, hashed, and a private copy of exactly those bytes is what runs;
+   * a mismatch is refused before anything executes. Adapters for pinned
+   * engines take this from `externalPins`/`osvPin`.
+   */
+  executableSha256?: string;
+  /**
+   * Engines whose report reporter writes a file (for example jscpd) declare
+   * it here. `path` is relative to the private workspace (the engine runs in
+   * `<workspace>/source`, so arguments reach it as `../<dir>`); the directory
+   * is created first, the file is read with a bounded, no-symlink read after a
+   * successful exit, and `parse` receives its content instead of stdout.
+   */
+  outputFile?: { path: string; maxBytes: number };
   /** Run before the scan; its trimmed stdout must equal `versionOutput`. */
   versionArgs: readonly string[];
   versionOutput: string;
@@ -57,7 +75,7 @@ export interface ScannerAdapter {
   /** Exit codes that mean the engine ran (for example ESLint uses 0 and 1). */
   successExitCodes: readonly number[];
   /**
-   * Parse stdout into findings. `partial` marks results the engine reported as
+   * Parse stdout (or the declared `outputFile` content) into findings. `partial` marks results the engine reported as
    * incomplete. Throw or return `undefined` for unusable output.
    */
   parse(
@@ -90,7 +108,16 @@ function adapterProblem(adapter: ScannerAdapter): string | undefined {
     !isEnvelopeVersion(adapter.engine.version) ||
     !isEnvelopeVersion(adapter.rulesetVersion) ||
     !isEnvelopeVersion(adapter.configVersion) ||
-    adapter.versionOutput.length === 0
+    adapter.versionOutput.length === 0 ||
+    (adapter.executableSha256 !== undefined &&
+      !/^[a-f0-9]{64}$/.test(adapter.executableSha256)) ||
+    (adapter.outputFile !== undefined &&
+      (!isSafeRelativePath(adapter.outputFile.path) ||
+        adapter.outputFile.path.split('/').length < 2 ||
+        !Number.isSafeInteger(adapter.outputFile.maxBytes) ||
+        adapter.outputFile.maxBytes < 1 ||
+        adapter.outputFile.maxBytes > adapterLimits.totalBytes ||
+        adapter.outputFile.path.startsWith('source/')))
   )
     return 'pin';
   return undefined;
@@ -198,8 +225,33 @@ export async function runAdapter(
       await mkdir(dirname(target), { recursive: true, mode: 0o700 });
       await writeFile(target, content, { mode: 0o600, flag: 'wx' });
     }
+    let executable = adapter.executable;
+    if (adapter.executableSha256 !== undefined) {
+      let bytes: Buffer;
+      try {
+        bytes = await readBoundedRegular(
+          adapter.executable,
+          adapterLimits.executableBytes,
+        );
+      } catch {
+        return build('failed', 'engine-version-mismatch');
+      }
+      if (
+        createHash('sha256').update(bytes).digest('hex') !==
+        adapter.executableSha256
+      )
+        return build('failed', 'engine-version-mismatch');
+      // Run the verified bytes, not a path that could change after the check.
+      executable = join(workspace, 'engine');
+      await writeFile(executable, bytes, { mode: 0o700, flag: 'wx' });
+    }
+    if (adapter.outputFile)
+      await mkdir(dirname(join(workspace, adapter.outputFile.path)), {
+        recursive: true,
+        mode: 0o700,
+      });
     const version = await runScannerProcess({
-      executable: adapter.executable,
+      executable,
       args: adapter.versionArgs,
       cwd: workspace,
       timeoutMs: Math.min(timeoutMs, 10000),
@@ -214,7 +266,7 @@ export async function runAdapter(
     )
       return build('failed', 'engine-version-mismatch');
     const run = await runScannerProcess({
-      executable: adapter.executable,
+      executable,
       args: [...adapter.fixedArgs, ...args],
       cwd: source,
       timeoutMs,
@@ -239,9 +291,22 @@ export async function runAdapter(
     }
     if (!adapter.successExitCodes.includes(run.code))
       return build('failed', 'engine-error');
+    let output = run.stdout.toString('utf8');
+    if (adapter.outputFile) {
+      try {
+        output = (
+          await readBoundedRegular(
+            join(workspace, adapter.outputFile.path),
+            adapter.outputFile.maxBytes,
+          )
+        ).toString('utf8');
+      } catch {
+        return build('failed', 'invalid-output');
+      }
+    }
     let parsed: ParsedOutput | undefined;
     try {
-      parsed = adapter.parse(run.stdout.toString('utf8'), {
+      parsed = adapter.parse(output, {
         sourceRoot: source,
       });
     } catch {

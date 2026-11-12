@@ -7,6 +7,7 @@ import {
   isSafeRelativePath,
   redactMessage,
 } from './adapter-envelope.js';
+import { osvPin } from './scanner-pins.js';
 import {
   type ParsedOutput,
   type ScannerAdapter,
@@ -16,7 +17,7 @@ import {
 /** Pinned OSV-Scanner release; see docs/scanner-licensing.md (Apache-2.0). */
 export const osvAdapterEngine = Object.freeze({
   id: 'osv-scanner',
-  version: '2.7.1',
+  version: osvPin.version,
 });
 export const osvLockfileNames: readonly string[] = [
   'package-lock.json',
@@ -102,8 +103,13 @@ export interface OsvScanResult {
 export interface OsvAdapterOptions {
   /** Trusted absolute path to the pinned osv-scanner binary. */
   executable: string;
-  /** Exact trimmed `--version` output of the reviewed binary. */
+  /** Exact trimmed `--version` output of the reviewed binary; must contain the pinned version. */
   versionOutput: string;
+  /**
+   * SHA-256 the executable must match. Defaults to the pinned
+   * `osvPin.sha256`; override only for a fake in tests.
+   */
+  executableSha256?: string;
   /** Default `online`: the customer runs it with online OSV data. */
   mode?: 'online' | 'offline';
   /** Offline only (opt-in): ISO-8601 time the local database was built. */
@@ -356,6 +362,7 @@ export async function runOsvScan(
     rulesetVersion: datePart ? `osv-db-${datePart}` : `osv-${mode}`,
     configVersion: `osv-${mode}-v1`,
     executable: options.executable,
+    executableSha256: options.executableSha256 ?? osvPin.sha256,
     versionArgs: ['--version'],
     versionOutput: options.versionOutput,
     fixedArgs: [
@@ -388,6 +395,9 @@ export async function runOsvScan(
     });
     return { envelope, disclosure: { ...disclosure, outcome }, findings: [] };
   };
+  // A declared version that is not the pinned release is refused unrun.
+  if (!options.versionOutput.includes(osvPin.version))
+    return skip('invalid-request');
   if (!kind) return skip('unsupported-artefact');
   if (mode === 'online' && options.networkAvailable === false)
     return skip('network-denied');

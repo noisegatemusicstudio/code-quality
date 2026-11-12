@@ -1,3 +1,7 @@
+// Test classification: integration
+// Review status: Not Reviewed
+// Evidence: synthetic
+// Scope: Runs the real pinned ESLint through runAdapter on synthetic inline fixtures (findings, parse failures, config rejection, stable ids, bounded output); not a full hosted service path.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { classifyFiles, runEslintScan } from '../src/eslint-adapter.js';

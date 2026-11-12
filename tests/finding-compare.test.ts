@@ -1,3 +1,7 @@
+// Test classification: unit
+// Review status: Not Reviewed
+// Evidence: synthetic
+// Scope: Pure compareFindings and fingerprint helpers on synthetic envelopes; no engine is run.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type {

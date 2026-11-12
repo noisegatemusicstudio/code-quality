@@ -1,3 +1,7 @@
+// Test classification: unit
+// Review status: Not Reviewed
+// Evidence: synthetic
+// Scope: Synthetic inline source fixtures and scope shared by the ESLint adapter tests; contains no assertions.
 /** Inline fixtures keep real defects out of the repository's own lint scope. */
 export const defects = `export function check(a: number): boolean {
   var unused = 1;

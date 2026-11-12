@@ -1,0 +1,25 @@
+# Copyright (c) 2026 ReleaseReady. All rights reserved.
+# ReleaseReady-authored Semgrep rule (RRDSCRUM-133). Written from scratch; not
+# copied or derived from the Semgrep Registry or any other third-party rule set.
+# Ruleset version: 2026.11.1
+rules:
+  - id: releaseready.js.document-write
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: document.write inserts markup into the page. Review that no untrusted input reaches it.
+    patterns:
+      - pattern-either:
+          - pattern: document.write($X)
+          - pattern: document.writeln($X)
+      - pattern-not: 'document.write("...")'
+      - pattern-not: 'document.writeln("...")'
+    metadata:
+      category: security
+      cwe: 'CWE-79: Improper Neutralization of Input During Web Page Generation'
+      confidence: LOW
+      finding-type: hotspot
+      remediation: 'Build DOM nodes with createElement and textContent instead of writing markup.'
+      author: ReleaseReady
+      license: 'Proprietary, all rights reserved (ReleaseReady-authored)'
+      version: '1'
+      ruleset-version: '2026.11.1'

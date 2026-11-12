@@ -196,6 +196,13 @@ unmodified binary; nothing is bundled or redistributed.
 - JDK: Temurin 21 from a SHA-pinned `actions/setup-java` step. It is the runner's toolchain and is not sha256-pinned by this repository.
 - Checksums: neither PMD nor Checkstyle publishes a checksum file at the usual `.sha256` names for these releases, so the digests were computed from the official release assets on 2026-11-12. That detects later change and corruption, but it is not an independent upstream attestation.
 
+### SwiftLint (follow-up slice 9)
+
+- SwiftLint 0.65.1: MIT. Pinned from the official release asset `swiftlint_linux_amd64.zip` (zip sha256 `caeed6f4...`; extracted `swiftlint-static` sha256 `3384e7a4...`). Upstream publishes no checksum file for it, so the digests were computed from the official release asset on 2026-11-12; that detects later change and corruption but is not an independent upstream attestation. The static member is used because it has no libc or Swift runtime dependency. The binary was not executed in the authoring environment; the first real run is the pull request's quality scan. Notice duty: keep the MIT text (and `LICENSE.mimalloc`) if the binary is ever shipped.
+- Install: only when the checkout has tracked `.swift` files (`quality-scan-cli install --repo`).
+- Configuration: bundled default rules, or the repository root `.swiftlint.yml` when it passes the plain-YAML check in `src/swift-adapter.ts`. No other configuration, remote parent or analyzer rule is read or run; no `swift build`.
+- Severity: SwiftLint `Error` and `Warning` map to high and medium. Unknown labels map to high.
+
 ### detekt and ktlint (RRDSCRUM-186)
 
 - detekt 1.23.8: Apache-2.0. Pinned from the official release asset `detekt-cli-1.23.8-all.jar` (sha256 `2ce2ff95...`). ktlint 1.8.0: MIT. Pinned from the official release asset `ktlint` (sha256 `a3fd6202...`). Upstream publishes no checksum file for either, so the digests were computed from the official release assets on 2026-11-12; that detects later change and corruption but is not an independent upstream attestation. `quality-scan-cli install` verifies the digest before the file becomes executable and the adapter verifies it again before running. Both run as separate, unmodified jars; nothing is bundled or redistributed. Notice duty: keep the Apache-2.0 / MIT texts if either jar is ever shipped.

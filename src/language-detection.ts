@@ -33,7 +33,7 @@ const rules: readonly LanguageRule[] = [
     test: ext(/\.kts?$/),
     engines: ['detekt', 'ktlint'],
   },
-  { language: 'Swift', test: ext(/\.swift$/), engines: [] },
+  { language: 'Swift', test: ext(/\.swift$/), engines: ['swiftlint'] },
   {
     language: 'Shell',
     test: ext(/\.(?:sh|bash|ksh)$/),

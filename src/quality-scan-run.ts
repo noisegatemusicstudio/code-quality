@@ -49,6 +49,14 @@ import {
   runKotlinScan,
 } from './kotlin-adapter.js';
 import { ruffVersion, runRuffScan } from './ruff-adapter.js';
+import {
+  runSwiftlintScan,
+  swiftFile,
+  swiftConfigPath,
+  swiftWorkspace,
+  swiftlintUnrunnableReason,
+  swiftlintVersion,
+} from './swift-adapter.js';
 import { installZipTree, treeMatches } from './tree-install.js';
 import {
   type LintEngineId,
@@ -78,7 +86,9 @@ import {
   osvPin,
   detektPin,
   ktlintPin,
+  swiftlintPin,
   mypyPin,
+  swiftlintAnalyzePin,
   pmdPin,
   releaseTrees,
   spotbugsPin,
@@ -128,9 +138,18 @@ export type InstallableEngine =
   | 'checkstyle'
   | 'detekt'
   | 'ktlint'
+  | 'swiftlint'
   | 'hadolint'
   | 'tflint'
   | LintEngineId;
+/**
+ * Engines whose download is large enough to matter: `quality-scan-cli install`
+ * fetches them only when the repository has tracked files they scan, so a
+ * repository without Swift pays nothing for SwiftLint.
+ */
+export const installOnDemand: Partial<
+  Record<InstallableEngine, (path: string) => boolean>
+> = { swiftlint: (path) => swiftFile.test(path) };
 export const installableEngines: readonly InstallableEngine[] = [
   'gitleaks',
   'trivy',
@@ -141,6 +160,7 @@ export const installableEngines: readonly InstallableEngine[] = [
   'checkstyle',
   'detekt',
   'ktlint',
+  'swiftlint',
   'shellcheck',
   'shfmt',
   'actionlint',
@@ -938,6 +958,66 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     });
   await kotlinEngine('detekt', detektPin, createDetektAdapter);
   await kotlinEngine('ktlint', ktlintPin, createKtlintAdapter);
+
+  await guard('swiftlint', async () => {
+    const executable = options.tools.swiftlint;
+    if (
+      !executable ||
+      !(await executableMatches(executable, swiftlintPin.sha256))
+    )
+      return failed(
+        'swiftlint',
+        options.installErrors.swiftlint ??
+          'swiftlint missing or sha256 mismatch',
+      );
+    const { files, omitted, causes } = await readBoundedFiles(
+      options.repo,
+      paths,
+      (p) => swiftFile.test(p),
+    );
+    const config = await readBoundedFiles(
+      options.repo,
+      paths,
+      (p) => p === swiftConfigPath,
+    );
+    const workspace = swiftWorkspace(
+      files,
+      config.omitted ? undefined : config.files[swiftConfigPath],
+    );
+    const configProblem =
+      workspace.configRejected ??
+      (config.omitted ? 'unreadable or over the input limits' : undefined);
+    const result = await runSwiftlintScan({
+      executable,
+      scope: options.scope,
+      files: workspace.files,
+    });
+    const base = fromEnvelope('swiftlint', result, swiftlintVersion);
+    // A binary that cannot start on this host fails the version check; say so
+    // plainly (for example a glibc mismatch) instead of a bare envelope reason.
+    const unrunnable =
+      base.status === 'failed' && result.reason === 'engine-version-mismatch'
+        ? { ...base, reason: swiftlintUnrunnableReason }
+        : base;
+    const counted = applyOmitted(unrunnable, omitted, causes);
+    return configProblem !== undefined && counted.status === 'completed'
+      ? {
+          ...counted,
+          status: 'incomplete',
+          reason: `repository ${swiftConfigPath} was not used (${configProblem}); the bundled default configuration ran instead`,
+        }
+      : counted;
+  });
+  await guard('swiftlint-analyze', () =>
+    Promise.resolve({
+      ...skipped(
+        'swiftlint-analyze',
+        'unavailable',
+        swiftlintAnalyzePin.skipReason,
+      ),
+      version: swiftlintAnalyzePin.version,
+    }),
+  );
 
   await guard('mypy', () =>
     Promise.resolve({

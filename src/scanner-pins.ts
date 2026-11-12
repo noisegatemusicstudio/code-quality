@@ -115,6 +115,25 @@ export const ktlintPin = immutableMetadata({
   coverage:
     'ktlint standard ruleset, official code style, no .editorconfig and no experimental or custom rulesets, on tracked .kt/.kts files; never formats; needs a Java runtime',
 });
+/**
+ * Swift engine (follow-up slice 9). The official static Linux build
+ * (`swiftlint-static` from `swiftlint_linux_amd64.zip`), so no Swift toolchain
+ * and no macOS runner are needed. The pin is the sha256 of that executable.
+ */
+export const swiftlintPin = immutableMetadata({
+  version: '0.65.1',
+  license: 'MIT',
+  sha256: '3384e7a44d6f2b6f9820404111e2a777b08ba99de087979ed40f6832efc073f5',
+  coverage:
+    'SwiftLint default rules on tracked .swift files; the repository .swiftlint.yml is honoured only when it is plain YAML data (no URL, parent_config, child_config or tag), otherwise the bundled config applies; no analyzer rules, no swift build',
+});
+/** SwiftLint analyzer rules need a compiler log; a scan never builds, so they are never run. */
+export const swiftlintAnalyzePin = immutableMetadata({
+  version: '0.65.1',
+  license: 'MIT',
+  skipReason:
+    'requires compiled sources: SwiftLint analyzer rules need a compiler log from a build, and a scan never runs swift build or project code, so they cannot give a trustworthy result',
+});
 /** mypy is not run: it needs the project's dependencies installed (see docs/language-profiles.md). */
 export const mypyPin = immutableMetadata({
   version: '2.4.1',
@@ -257,6 +276,15 @@ export const releaseAssets = immutableMetadata({
     assetSha256: ktlintPin.sha256,
     member: null,
     binarySha256: ktlintPin.sha256,
+    source:
+      'sha256 computed from the official release asset on 2026-11-12 (upstream publishes no checksum file for it)',
+  },
+  swiftlint: {
+    url: 'https://github.com/realm/SwiftLint/releases/download/0.65.1/swiftlint_linux_amd64.zip',
+    assetSha256:
+      'caeed6f4a679c35539ffaf124f6c4ab4a8416917f7d8796279dc52b74026059d',
+    member: 'swiftlint-static',
+    binarySha256: swiftlintPin.sha256,
     source:
       'sha256 computed from the official release asset on 2026-11-12 (upstream publishes no checksum file for it)',
   },

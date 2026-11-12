@@ -53,12 +53,14 @@ await test('Kotlin is covered by detekt and ktlint, not skipped', () => {
   assert.deepEqual(kotlin.engines, ['detekt', 'ktlint']);
 });
 
-await test('languages without an engine are skipped, never clean', () => {
+await test('Swift is covered by SwiftLint, not skipped', () => {
+  const swift = detectLanguages(paths).find((l) => l.language === 'Swift');
+  assert.equal(swift?.status, 'covered');
+  assert.deepEqual(swift.engines, ['swiftlint']);
+});
+
+await test('covered languages name their engines', () => {
   const byName = new Map(detectLanguages(paths).map((l) => [l.language, l]));
-  for (const name of ['Swift']) {
-    assert.equal(byName.get(name)?.status, 'skipped: no engine yet', name);
-    assert.deepEqual(byName.get(name)?.engines, []);
-  }
   assert.equal(byName.get('TypeScript')?.status, 'covered');
   assert.deepEqual(byName.get('TypeScript')?.engines, ['eslint', 'semgrep']);
   for (const name of ['Terraform', 'Dockerfile', 'YAML', 'Markdown'])

@@ -28,7 +28,11 @@ const rules: readonly LanguageRule[] = [
   },
   { language: 'Python', test: ext(/\.pyi?$/), engines: ['ruff'] },
   { language: 'Java', test: ext(/\.java$/), engines: ['pmd', 'checkstyle'] },
-  { language: 'Kotlin', test: ext(/\.kts?$/), engines: [] },
+  {
+    language: 'Kotlin',
+    test: ext(/\.kts?$/),
+    engines: ['detekt', 'ktlint'],
+  },
   { language: 'Swift', test: ext(/\.swift$/), engines: [] },
   {
     language: 'Shell',

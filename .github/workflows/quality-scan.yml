@@ -13,7 +13,7 @@ on:
         type: string
         default: 22.23.4
       scanners:
-        description: 'Comma list of eslint, gitleaks, osv, trivy, semgrep, jscpd, ruff, mypy, pmd, checkstyle, spotbugs, shellcheck, shfmt, actionlint, zizmor, hadolint, tflint, yamllint, markdownlint, or all (applicable engines only).'
+        description: 'Comma list of eslint, gitleaks, osv, trivy, semgrep, jscpd, ruff, mypy, pmd, checkstyle, spotbugs, detekt, ktlint, shellcheck, shfmt, actionlint, zizmor, hadolint, tflint, yamllint, markdownlint, or all (applicable engines only).'
         type: string
         default: all
       code-quality-ref:
@@ -92,6 +92,9 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npm run build
+      # detekt and ktlint are JVM jars. ubuntu-latest ships Temurin (JAVA_HOME);
+      # the scan finds it itself and reports the Kotlin engines `skipped` with a
+      # reason when no runtime exists, so no third-party action is needed.
       - name: Install pinned engines (sha256-verified)
         run: node .quality-tool/dist/src/quality-scan-cli.js install --dir "$RUNNER_TEMP/engines" --scanners "$CQ_SCANNERS"
       - name: Install pinned Semgrep (hash-locked)

@@ -17,29 +17,39 @@ not to be bundled or shipped until counsel confirms).
 
 ## 1. Repository inventory
 
-Tracked files, shallow clones, lockfiles excluded. Only 5 of the 11 requested
-repositories could be inventoried (see "Not inventoried").
+Tracked files, shallow clones, lockfiles excluded. All 11 ReleaseReady
+repositories are inventoried (the last six on 12 Nov 2026, slice 15).
 
-| Repository                               | Languages and file types (tracked files)                                                                     | Build / test tooling                                                       | IaC / container / CI                                            | Existing lint intent                                                                                               |
-| ---------------------------------------- | ------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| noisegatemusicstudio/code-quality        | TypeScript 72, YAML 10, Markdown 5, JSON 4                                                                   | tsc, node --test, Prettier, ESLint, husky, lint-staged                     | 3 workflows                                                     | ESLint flat config (`qualityConfig`) + Prettier + `quality.ignore`                                                 |
-| releaseready/ReleaseReady                | TypeScript 563 (+28 .mts), TSX 63, Gherkin 36, Markdown 101, JSON 82, Python 2, Shell 1, YAML 9, CSS 8       | tsc, Vite, custom test runner, c8, Cucumber, Docker compose tests          | 8 Dockerfile variants, compose, 3 workflows, `requirements.txt` | `lint` = custom `.build/lint.js`; `format:check` = Prettier over an explicit file list; no ESLint config tracked   |
-| releaseready/frontend-ui                 | TSX 154, TypeScript 73 (+2 .mts), JS 9, MJS 34, CSS 31, HTML 30, Markdown 107, JSON 286, Python 2, Gherkin 2 | npm workspaces, tsc (`tsconfig.check.json`), Vitest, Playwright, Storybook | 1 YAML                                                          | No ESLint, Prettier or other lint config tracked; type-check only                                                  |
-| releaseready/test-management             | TypeScript 113, MJS 12, Markdown 15, JSON 7                                                                  | tsc, node --test, Forge wiring scripts                                     | none                                                            | `format:check` = Prettier; no ESLint config tracked                                                                |
-| releaseready/universal-appium2-framework | TypeScript 18, MJS 1, Markdown 8, JSON 3, Gherkin 1, YAML 1                                                  | tsx, WebdriverIO, node --test                                              | 1 workflow (`quality.yml`)                                      | `eslint.config.mjs`: ESLint `recommended` + typescript-eslint `recommended` with `projectService`; Prettier script |
+| Repository                                  | Languages and file types (tracked files)                                                                     | Build / test tooling                                                                | IaC / container / CI                                            | Existing lint intent                                                                                               |
+| ------------------------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------- | --------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| noisegatemusicstudio/code-quality           | TypeScript 72, YAML 10, Markdown 5, JSON 4                                                                   | tsc, node --test, Prettier, ESLint, husky, lint-staged                              | 3 workflows                                                     | ESLint flat config (`qualityConfig`) + Prettier + `quality.ignore`                                                 |
+| releaseready/ReleaseReady                   | TypeScript 563 (+28 .mts), TSX 63, Gherkin 36, Markdown 101, JSON 82, Python 2, Shell 1, YAML 9, CSS 8       | tsc, Vite, custom test runner, c8, Cucumber, Docker compose tests                   | 8 Dockerfile variants, compose, 3 workflows, `requirements.txt` | `lint` = custom `.build/lint.js`; `format:check` = Prettier over an explicit file list; no ESLint config tracked   |
+| releaseready/frontend-ui                    | TSX 154, TypeScript 73 (+2 .mts), JS 9, MJS 34, CSS 31, HTML 30, Markdown 107, JSON 286, Python 2, Gherkin 2 | npm workspaces, tsc (`tsconfig.check.json`), Vitest, Playwright, Storybook          | 1 YAML                                                          | No ESLint, Prettier or other lint config tracked; type-check only                                                  |
+| releaseready/test-management                | TypeScript 113, MJS 12, Markdown 15, JSON 7                                                                  | tsc, node --test, Forge wiring scripts                                              | none                                                            | `format:check` = Prettier; no ESLint config tracked                                                                |
+| releaseready/universal-appium2-framework    | TypeScript 18, MJS 1, Markdown 8, JSON 3, Gherkin 1, YAML 1                                                  | tsx, WebdriverIO, node --test                                                       | 1 workflow (`quality.yml`)                                      | `eslint.config.mjs`: ESLint `recommended` + typescript-eslint `recommended` with `projectService`; Prettier script |
+| noisegatemusicstudio/ai-orchestrator        | Python 159, Markdown 23, JSON 8, MJS 2, YAML 1                                                               | `python3 -m unittest`; `requirements.txt` is standard library only                  | 1 workflow (`quality.yml`)                                      | No Ruff, flake8, mypy or pyproject config tracked                                                                  |
+| noisegatemusicstudio/cloud-platform         | Terraform 23 (+15 .hcl), Python 15, Markdown 13, JSON 4, YAML 2, Makefile                                    | `make offline-check` (format-check, validate, test, safety, policy, lint, security) | Terraform modules and environments, 2 workflows                 | `.tflint.hcl`; Python lint not configured                                                                          |
+| releaseready/test-data-management           | TypeScript 62, MJS 9, Markdown 13, JSON 7, YAML 4, Dockerfile 1                                              | tsc, node --test, Prettier, Redocly, `npm run check`                                | 1 Dockerfile, 2 compose files, 1 workflow                       | `format:check` = Prettier; no ESLint config tracked; `.sonarcloud.properties` (retire at cutover)                  |
+| releaseready/observability                  | Python 6, YAML 8, Markdown 6, text 8, JSON 1                                                                 | Python probes and tests                                                             | 3 compose files, Prometheus config, 1 workflow                  | No lint configuration tracked                                                                                      |
+| releaseready/universal-playwright-framework | TypeScript 119, Markdown 29, JSON 22, Gherkin 11, Shell 2, HTML 1                                            | tsc, Playwright, Cucumber, Allure                                                   | 1 workflow                                                      | Legacy `.eslintrc.json` on ESLint 8 / typescript-eslint 6 (`lint` script); Prettier `format:check`                 |
+| releaseready/universal-api-framework        | TypeScript 12, MJS 8, JSON 6, Markdown 4, JS 1                                                               | tsc, node --test, k6 performance scripts                                            | 1 workflow                                                      | No ESLint or Prettier config tracked                                                                               |
 
-Across all five: no `.editorconfig`, yamllint, markdownlint, Ruff/flake8/mypy,
-hadolint, tflint or shell-lint configuration exists. TypeScript dominates;
-Python (4 files), Shell (1) and Dockerfiles (8) are small.
+Across all eleven: no `.editorconfig`, yamllint, markdownlint, Ruff/flake8/mypy,
+hadolint or shell-lint configuration exists; only cloud-platform configures
+tflint. TypeScript dominates; Python is the second language (about 185 files,
+mostly ai-orchestrator), then Terraform (cloud-platform), Shell (3) and
+Dockerfiles (9). No Kotlin, Java or Swift files exist yet, so those engines
+detect nothing on internal repositories today.
 
-**Not inventoried** — say so rather than assume clean:
+Follow-ups from the six newly inventoried repositories:
 
-- `noisegatemusicstudio/ai-orchestrator`, `noisegatemusicstudio/cloud-platform`,
-  `releaseready/test-data-management`, `releaseready/observability`: the
-  session's `add_repo` request was denied by the permission classifier.
-- `releaseready/universal-playwright-framework`,
-  `releaseready/universal-api-framework`: anonymous clone failed (private);
-  `add_repo` was not attempted after the denials above.
+- universal-playwright-framework runs ESLint 8 with a legacy `.eslintrc.json`;
+  the shared scan uses its own flat config, so the repo's own `lint` script
+  can stay until it migrates to the shared `qualityConfig`.
+- test-data-management still has `.sonarcloud.properties`; remove it at the
+  SonarQube cutover, not before.
+- ai-orchestrator and observability are Python-first with no linter
+  configuration; the shared Ruff engine covers them from its bundled config.
 
 ## 2. Language profiles
 
@@ -171,7 +181,7 @@ threshold; the workflow default `high` equals the gate's.
 Every run lists the languages found with file counts. A language without a
 language-aware engine is reported as `skipped: no engine yet`, in both
 `summary.md` and `report.json` (`languages`). Today only TypeScript and
-JavaScript (ESLint, Semgrep), Python (Ruff), Java (PMD, Checkstyle), JSON and CSS (Prettier), Shell (ShellCheck, shfmt), GitHub Actions
+JavaScript (ESLint, Semgrep), Python (Ruff), Java (PMD, Checkstyle), Kotlin (detekt, ktlint), JSON and CSS (Prettier), Shell (ShellCheck, shfmt), GitHub Actions
 workflows (actionlint, zizmor), Dockerfile (Trivy, hadolint), Terraform (Trivy,
 tflint), YAML (yamllint, Prettier) and Markdown (markdownlint, Prettier) count as covered (Prettier is also listed for TypeScript and JavaScript); gitleaks, OSV and jscpd are language-agnostic and not counted.
 
@@ -194,7 +204,10 @@ tflint), YAML (yamllint, Prettier) and Markdown (markdownlint, Prettier) count a
 4. GitHub Actions: actionlint and zizmor (cheap, MIT, we already ship workflows). **Done**: pinned, zizmor offline.
 5. Dockerfile: hadolint (GPL, internal runs first). **Done.**
 6. Terraform: tflint beside Trivy. **Done** (bundled terraform ruleset, no plugins).
-7. Kotlin: detekt and ktlint (RRDSCRUM-186).
+7. Kotlin: detekt and ktlint (RRDSCRUM-186). **Done:** detekt 1.23.8 (default
+   ruleset, SARIF) and ktlint 1.8.0 (official style, JSON reporter) are
+   sha256-pinned jars run as `java -jar`; no Java runtime means
+   `skipped: needs a Java runtime` (see `docs/scanner-licensing.md`).
 8. Java: PMD, Checkstyle, SpotBugs + FindSecBugs (RRDSCRUM-185). **Done for
    the source-only engines:** PMD 7.29.0 (quickstart) and Checkstyle 14.4.0
    (Google checks) run on the workflow's JDK; SpotBugs is reported
@@ -229,4 +242,4 @@ tflint), YAML (yamllint, Prettier) and Markdown (markdownlint, Prettier) count a
 13. Type-aware ESLint for customers: opt-in input that supplies a reviewed
     tsconfig.
 14. Counsel review of every "customer: needs review" tool.
-15. Inventory the six repositories that could not be read.
+15. Inventory the six repositories that could not be read. **Done** (12 Nov 2026).

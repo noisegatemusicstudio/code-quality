@@ -39,6 +39,8 @@ export const adapterLimits = Object.freeze({
   fileBytes: 1048576,
   totalBytes: 16777216,
   executableBytes: 67108864,
+  /** Ceiling for an adapter's own `executableMaxBytes` (self-contained JVM jars). */
+  executableBytesCeiling: 134217728,
   args: 32,
   argChars: 256,
 });
@@ -57,6 +59,8 @@ export interface ScannerAdapter {
    * engines take this from `externalPins`/`osvPin`.
    */
   executableSha256?: string;
+  /** Size cap for the executable read; defaults to `adapterLimits.executableBytes`, at most the ceiling. */
+  executableMaxBytes?: number;
   /**
    * Engines whose report reporter writes a file (for example jscpd) declare
    * it here. `path` is relative to the private workspace (the engine runs in
@@ -126,6 +130,10 @@ function adapterProblem(adapter: ScannerAdapter): string | undefined {
     adapter.versionOutput.length === 0 ||
     (adapter.executableSha256 !== undefined &&
       !/^[a-f0-9]{64}$/.test(adapter.executableSha256)) ||
+    (adapter.executableMaxBytes !== undefined &&
+      (!Number.isSafeInteger(adapter.executableMaxBytes) ||
+        adapter.executableMaxBytes < 1 ||
+        adapter.executableMaxBytes > adapterLimits.executableBytesCeiling)) ||
     (adapter.outputFile !== undefined &&
       (!isSafeRelativePath(adapter.outputFile.path) ||
         adapter.outputFile.path.split('/').length < 2 ||
@@ -246,7 +254,7 @@ export async function runAdapter(
       try {
         bytes = await readBoundedRegular(
           adapter.executable,
-          adapterLimits.executableBytes,
+          adapter.executableMaxBytes ?? adapterLimits.executableBytes,
         );
       } catch {
         return build('failed', 'engine-version-mismatch');

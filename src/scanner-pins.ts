@@ -97,6 +97,24 @@ export const ruffPin = immutableMetadata({
   coverage:
     'Ruff E, F, W, I, B, UP, S, C4, SIM, PL from the bundled config only; project pyproject.toml/ruff.toml are never read; no type checking',
 });
+/**
+ * Kotlin engines (RRDSCRUM-186). Both are self-contained JVM jars run as
+ * `java -jar <verified copy>`; the pin is the sha256 of the jar itself.
+ */
+export const detektPin = immutableMetadata({
+  version: '1.23.8',
+  license: 'Apache-2.0',
+  sha256: '2ce2ff952e150baf28a29cda70a363b0340b3e81a55f43e51ec5edffc3d066c1',
+  coverage:
+    'detekt default ruleset (no project detekt.yml, no plugins, no type resolution) on tracked .kt/.kts files; needs a Java runtime',
+});
+export const ktlintPin = immutableMetadata({
+  version: '1.8.0',
+  license: 'MIT',
+  sha256: 'a3fd620207d5c40da6ca789b95e7f823c54e854b7fade7f613e91096a3706d75',
+  coverage:
+    'ktlint standard ruleset, official code style, no .editorconfig and no experimental or custom rulesets, on tracked .kt/.kts files; never formats; needs a Java runtime',
+});
 /** mypy is not run: it needs the project's dependencies installed (see docs/language-profiles.md). */
 export const mypyPin = immutableMetadata({
   version: '2.4.1',
@@ -225,6 +243,22 @@ export const releaseAssets = immutableMetadata({
     binarySha256: ruffPin.sha256,
     source:
       'https://github.com/astral-sh/ruff/releases/download/0.17.4/ruff-x86_64-unknown-linux-gnu.tar.gz.sha256',
+  },
+  detekt: {
+    url: 'https://github.com/detekt/detekt/releases/download/v1.23.8/detekt-cli-1.23.8-all.jar',
+    assetSha256: detektPin.sha256,
+    member: null,
+    binarySha256: detektPin.sha256,
+    source:
+      'sha256 computed from the official release asset on 2026-11-12 (upstream publishes no checksum file for it)',
+  },
+  ktlint: {
+    url: 'https://github.com/pinterest/ktlint/releases/download/1.8.0/ktlint',
+    assetSha256: ktlintPin.sha256,
+    member: null,
+    binarySha256: ktlintPin.sha256,
+    source:
+      'sha256 computed from the official release asset on 2026-11-12 (upstream publishes no checksum file for it)',
   },
   shellcheck: {
     url: 'https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz',

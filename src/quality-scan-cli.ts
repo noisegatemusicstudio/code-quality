@@ -11,7 +11,13 @@ import {
   renderSummary,
   type EngineResult,
 } from './quality-scan.js';
-import { buildManifest, ManifestError } from './quality-manifest.js';
+import {
+  buildLocalManifest,
+  buildManifest,
+  ManifestError,
+  validateLocalIdentity,
+  type LocalIdentityFlags,
+} from './quality-manifest.js';
 import { detectLanguages } from './language-detection.js';
 import { resolveJava } from './java-runtime.js';
 import { loadGate, decideWithGate, gateMeasuresFrom } from './quality-gate.js';
@@ -75,6 +81,49 @@ async function install(args: string[]): Promise<number> {
   return 0;
 }
 
+const localIdentityFlags = [
+  'repository',
+  'ref',
+  'event',
+  'run-id',
+  'run-attempt',
+];
+
+/**
+ * `--manifest local` selects an explicit, flag-given identity for runs outside
+ * GitHub Actions. Returns the validated flags, undefined when local mode is
+ * off, or an error message (exit 2). Identity flags without `--manifest local`
+ * are refused rather than ignored, and local mode never runs under Actions.
+ */
+function localMode(
+  args: string[],
+  environment: NodeJS.ProcessEnv,
+): { flags?: LocalIdentityFlags; error?: string } {
+  const mode = option(args, 'manifest');
+  if (args.includes('--manifest') && mode !== 'local')
+    return { error: '--manifest must be local' };
+  if (mode !== 'local') {
+    const stray = localIdentityFlags.find((n) => args.includes(`--${n}`));
+    return stray ? { error: `--${stray} requires --manifest local` } : {};
+  }
+  if (environment.GITHUB_ACTIONS === 'true')
+    return { error: '--manifest local cannot be used on GitHub Actions' };
+  const flags: LocalIdentityFlags = {
+    repository: option(args, 'repository'),
+    ref: option(args, 'ref'),
+    event: option(args, 'event'),
+    runId: option(args, 'run-id'),
+    runAttempt: option(args, 'run-attempt'),
+  };
+  try {
+    validateLocalIdentity(flags);
+  } catch (error) {
+    if (!(error instanceof ManifestError)) throw error;
+    return { error: error.message };
+  }
+  return { flags };
+}
+
 async function run(args: string[]): Promise<number> {
   const repo = resolve(option(args, 'repo') ?? '.');
   const out = resolve(option(args, 'out') ?? 'quality-scan');
@@ -94,6 +143,11 @@ async function run(args: string[]): Promise<number> {
     process.stderr.write(
       'invalid input: osv-mode must be online, offline or off\n',
     );
+    return 2;
+  }
+  const local = localMode(args, process.env);
+  if (local.error !== undefined) {
+    process.stderr.write(`invalid input: ${local.error}\n`);
     return 2;
   }
   const enforce = option(args, 'enforce') === 'true';
@@ -275,7 +329,8 @@ async function run(args: string[]): Promise<number> {
     JSON.stringify(
       buildReport({
         commitSha,
-        repository: process.env.GITHUB_REPOSITORY ?? 'local',
+        repository:
+          local.flags?.repository ?? process.env.GITHUB_REPOSITORY ?? 'local',
         results,
         decision,
         languages,
@@ -298,16 +353,20 @@ async function run(args: string[]): Promise<number> {
   if (process.env.GITHUB_STEP_SUMMARY)
     await appendFile(process.env.GITHUB_STEP_SUMMARY, summary + '\n');
   process.stdout.write(summary + '\n');
-  // The portal contract: required on GitHub Actions, where the identity comes from.
-  if (process.env.GITHUB_ACTIONS === 'true') {
+  // The portal contract: required on GitHub Actions, where the identity comes
+  // from, and in local mode, where it comes from validated flags.
+  if (local.flags || process.env.GITHUB_ACTIONS === 'true') {
     try {
-      const manifest = buildManifest(process.env, {
+      const manifestInput = {
         commitSha,
         codeQualityRef: option(args, 'code-quality-ref') ?? '',
         results,
         envelopeFiles,
         measures: newCode.measures,
-      });
+      };
+      const manifest = local.flags
+        ? buildLocalManifest(local.flags, manifestInput)
+        : buildManifest(process.env, manifestInput);
       await writeFile(
         join(out, 'manifest.json'),
         JSON.stringify(manifest, null, 2),

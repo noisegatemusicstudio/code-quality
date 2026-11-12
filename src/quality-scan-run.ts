@@ -47,6 +47,13 @@ import {
   runCheckstyleScan,
   runPmdScan,
 } from './java-adapters.js';
+import {
+  createDetektAdapter,
+  createKtlintAdapter,
+  javaSkipReason,
+  kotlinFile,
+  runKotlinScan,
+} from './kotlin-adapter.js';
 import { ruffVersion, runRuffScan } from './ruff-adapter.js';
 import { installZipTree, treeMatches } from './tree-install.js';
 import {
@@ -75,6 +82,8 @@ import {
   markdownlintPin,
   lintPins,
   osvPin,
+  detektPin,
+  ktlintPin,
   mypyPin,
   pmdPin,
   releaseTrees,
@@ -123,6 +132,8 @@ export type InstallableEngine =
   | 'ruff'
   | 'pmd'
   | 'checkstyle'
+  | 'detekt'
+  | 'ktlint'
   | 'hadolint'
   | 'tflint'
   | LintEngineId;
@@ -134,6 +145,8 @@ export const installableEngines: readonly InstallableEngine[] = [
   'ruff',
   'pmd',
   'checkstyle',
+  'detekt',
+  'ktlint',
   'shellcheck',
   'shfmt',
   'actionlint',
@@ -517,6 +530,22 @@ export interface RunOptions {
   rulesDirectory: string;
   /** `online` (default) sends package metadata to the OSV API; see the summary. */
   osvMode?: OsvMode;
+}
+
+/** `--version` of a verified jar under the scrubbed environment; it must name the pinned version. */
+export async function jarVersionOutput(
+  java: string,
+  jar: string,
+  expectedVersion: string,
+): Promise<string> {
+  const { stdout } = await exec(java, ['-jar', jar, '--version'], {
+    env: { LANG: 'C', LC_ALL: 'C', TZ: 'UTC' },
+    timeout: 20000,
+  });
+  const output = stdout.trim();
+  if (!output.includes(expectedVersion))
+    throw new Error('unexpected engine version');
+  return output;
 }
 
 const maxLockfiles = 20;
@@ -922,6 +951,48 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
       version: spotbugsPin.version,
     }),
   );
+
+  const kotlinEngine = (
+    id: 'detekt' | 'ktlint',
+    pin: typeof detektPin | typeof ktlintPin,
+    createAdapter: typeof createDetektAdapter,
+  ) =>
+    guard(id, async () => {
+      const java = options.tools.java;
+      if (!java)
+        return {
+          ...skipped(id, 'unavailable', javaSkipReason),
+          version: pin.version,
+        };
+      const executable = options.tools[id];
+      if (!executable || !(await executableMatches(executable, pin.sha256)))
+        return failed(
+          id,
+          options.installErrors[id] ?? `${id} missing or sha256 mismatch`,
+        );
+      const { files, omitted, causes } = await readBoundedFiles(
+        options.repo,
+        paths,
+        (p) => kotlinFile.test(p),
+      );
+      const adapter = createAdapter(
+        java,
+        executable,
+        await jarVersionOutput(java, executable, pin.version),
+      );
+      const result = await runKotlinScan({
+        adapter,
+        scope: options.scope,
+        files,
+      });
+      return applyOmitted(
+        fromEnvelope(id, result, pin.version),
+        omitted,
+        causes,
+      );
+    });
+  await kotlinEngine('detekt', detektPin, createDetektAdapter);
+  await kotlinEngine('ktlint', ktlintPin, createKtlintAdapter);
 
   await guard('mypy', () =>
     Promise.resolve({

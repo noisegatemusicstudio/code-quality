@@ -196,6 +196,13 @@ unmodified binary; nothing is bundled or redistributed.
 - JDK: Temurin 21 from a SHA-pinned `actions/setup-java` step. It is the runner's toolchain and is not sha256-pinned by this repository.
 - Checksums: neither PMD nor Checkstyle publishes a checksum file at the usual `.sha256` names for these releases, so the digests were computed from the official release assets on 2026-11-12. That detects later change and corruption, but it is not an independent upstream attestation.
 
+### detekt and ktlint (RRDSCRUM-186)
+
+- detekt 1.23.8: Apache-2.0. Pinned from the official release asset `detekt-cli-1.23.8-all.jar` (sha256 `2ce2ff95...`). ktlint 1.8.0: MIT. Pinned from the official release asset `ktlint` (sha256 `a3fd6202...`). Upstream publishes no checksum file for either, so the digests were computed from the official release assets on 2026-11-12; that detects later change and corruption but is not an independent upstream attestation. `quality-scan-cli install` verifies the digest before the file becomes executable and the adapter verifies it again before running. Both run as separate, unmodified jars; nothing is bundled or redistributed. Notice duty: keep the Apache-2.0 / MIT texts if either jar is ever shipped.
+- Runtime: the workflow's JDK (`JAVA_HOME/bin/java` or `--java`, the same step as the Java engines). The Java runtime is not pinned or hashed; the jars' bytes are. With no runtime both engines are reported `skipped: needs a Java runtime`, never clean.
+- Configuration: detekt runs its default ruleset with no `detekt.yml`, baseline or plugins and no type resolution; ktlint runs the standard ruleset in the official code style with no `.editorconfig`. The adapter copies only `.kt` and `.kts` files into its workspace, so no project configuration is read. Neither engine formats or fixes source.
+- Severity: detekt SARIF `error`, `warning`, `note` map to high, medium, low; ktlint has no severity, so each violation is `style` and maps to low. Unknown labels map to high.
+
 ### Prettier (follow-up slice 11)
 
 - Prettier 3.9.10: MIT. It is already a direct dependency of this package (exact version in `package.json` and `package-lock.json`), so no new artefact is downloaded or pinned. The adapter refuses to run if the installed version differs from the approved one.

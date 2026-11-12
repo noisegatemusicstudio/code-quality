@@ -461,9 +461,13 @@ Licence, redistribution and hosted-use review of candidate scanners (RRDSCRUM-61
 `.github/workflows/quality-scan.yml` is a reusable workflow that runs this
 package's scanners on a pull request: ESLint (bundled rules), Gitleaks, Trivy
 (filesystem IaC checks), Semgrep (ReleaseReady rules in `rules/semgrep` only, no
-registry rules), jscpd and OSV. Every engine is downloaded at the version and
+registry rules), jscpd and OSV, plus hadolint (Dockerfiles), tflint (Terraform,
+bundled ruleset only, no plugin downloads), yamllint and markdownlint-cli2, all
+with bundled default configs (project configs are never applied). Every engine is downloaded at the version and
 sha256 pinned in `src/scanner-pins.ts` and refused on mismatch; Semgrep is
-installed with `pip --require-hashes` from `scanners/semgrep-requirements.txt`.
+installed with `pip --require-hashes` from `scanners/semgrep-requirements.txt`
+(yamllint likewise from `scanners/yamllint-requirements.txt`); markdownlint-cli2
+comes from the integrity-checked `package-lock.json`.
 The job needs `contents: read` and no secrets.
 
 ```yaml
@@ -545,7 +549,7 @@ guessed. Fields (`schemaVersion` 1):
 | `engines[]`           | list                     | one entry per engine, below                                           |
 
 Each `engines[]` entry: `id` (`eslint`, `gitleaks`, `osv`, `trivy`, `semgrep`,
-`jscpd`), `version` (string or `null`), `status` (`completed`, `incomplete`,
+`jscpd`, `hadolint`, `tflint`, `yamllint`, `markdownlint`), `version` (string or `null`), `status` (`completed`, `incomplete`,
 `failed` or `skipped`), `reason` (string or `null`), `findingCount` (after
 exceptions), `exceptedCount`, and `envelope` (artifact-relative path or `null`).
 Treat anything other than `completed` as "not clean". Additive fields may

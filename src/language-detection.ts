@@ -36,16 +36,24 @@ const rules: readonly LanguageRule[] = [
     test: (p) =>
       /^(?:Dockerfile|Containerfile)(?:\.[A-Za-z0-9_-]+)?$/.test(base(p)) &&
       !p.endsWith('.dockerignore'),
-    engines: ['trivy'],
+    engines: ['trivy', 'hadolint'],
   },
-  { language: 'Terraform', test: ext(/\.(?:tf|tfvars)$/), engines: ['trivy'] },
+  {
+    language: 'Terraform',
+    test: ext(/\.(?:tf|tfvars)$/),
+    engines: ['trivy', 'tflint'],
+  },
   {
     language: 'GitHub Actions',
     test: ext(/(?:^|\/)\.github\/workflows\/[^/]+\.ya?ml$/),
     engines: [],
   },
-  { language: 'YAML', test: ext(/\.ya?ml$/), engines: [] },
-  { language: 'Markdown', test: ext(/\.(?:md|markdown)$/), engines: [] },
+  { language: 'YAML', test: ext(/\.ya?ml$/), engines: ['yamllint'] },
+  {
+    language: 'Markdown',
+    test: ext(/\.(?:md|markdown)$/),
+    engines: ['markdownlint'],
+  },
 ];
 
 export interface LanguageReport {

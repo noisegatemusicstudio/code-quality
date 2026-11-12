@@ -54,6 +54,45 @@ export const semgrepPin = immutableMetadata({
     '0eb6aaadad5b957af96d1300487e10af1dc8016e8ef53072effb48cd4906c02b',
 });
 
+/** Lint engines added after the first set; all run with bundled defaults only. */
+export const hadolintPin = immutableMetadata({
+  version: '2.15.1',
+  license: 'GPL-3.0',
+  sha256: 'c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507',
+  coverage:
+    'Dockerfile/Containerfile syntax and best-practice rules (bundled defaults, no .hadolint.yaml); no image build, no ShellCheck-free guarantee',
+});
+export const tflintPin = immutableMetadata({
+  version: '0.66.0',
+  license: 'MPL-2.0',
+  sha256: '8f33a3e34dd83cd4bf43646f2e8492d4d5bb8941036a9ae517b611e56004e70d',
+  coverage:
+    'Terraform *.tf only, bundled terraform ruleset (no plugin download, no provider rulesets, no .tflint.hcl); no plan/apply',
+});
+export const yamllintPin = immutableMetadata({
+  version: '1.38.0',
+  license: 'GPL-3.0',
+  /** Hash-locked dependency set installed with --require-hashes. */
+  requirements: 'scanners/yamllint-requirements.txt',
+  /** sha256 of the yamllint py3-none-any wheel (PyPI), also in the lock. */
+  wheelSha256:
+    'fc394a5b3be980a4062607b8fdddc0843f4fa394152b6da21722f5d59013c220',
+  coverage:
+    'YAML syntax and the yamllint `default` preset (no .yamllint config); no schema validation',
+});
+export const markdownlintPin = immutableMetadata({
+  version: '0.24.1',
+  license: 'MIT',
+  /** markdownlint-cli2 0.24.1 bundles markdownlint 0.42.1; integrity comes from package-lock.json. */
+  engineVersion: '0.42.1',
+  /** sha256 of node_modules/markdownlint-cli2/markdownlint-cli2-bin.mjs. */
+  sha256: '558a203f7c5deb0e2d4f309ed468e0454218427e57f196876cbbdd393678d772',
+  npmIntegrity:
+    'sha512-nLhes/MIPJQLm+Gmh+3jQEnwMOaalaN0wfCD2qz1247zNZ7R3r2WDHJB191x4hcy6soKAUTybp1bFK7aJGw/WA==',
+  coverage:
+    'Markdown files, markdownlint default rules (no project config, no custom rules or plugins)',
+});
+
 /**
  * Official linux-amd64 release assets. `assetSha256` is the digest of the
  * downloaded file as published upstream; `binarySha256` (when the asset is an
@@ -95,5 +134,22 @@ export const releaseAssets = immutableMetadata({
     binarySha256: externalPins.jscpd.sha256,
     source:
       'npm registry dist.integrity sha512-BbL0HypadbjpxNfK/KY4CfpD4sCd2zf9HpFnGwwOjdryjdTG098isft/95BiS/XvZjVT3p6lwLf5ToI97OoqCg== for jscpd-linux-x64-gnu@5.4.3 (no upstream sha256 file is published; sha256 computed from that verified tarball)',
+  },
+  hadolint: {
+    url: 'https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-linux-x86_64',
+    assetSha256: hadolintPin.sha256,
+    member: null,
+    binarySha256: hadolintPin.sha256,
+    source:
+      'sha256 computed from the release asset downloaded over TLS from github.com (upstream publishes no checksum file for v2.15.1)',
+  },
+  tflint: {
+    url: 'https://github.com/terraform-linters/tflint/releases/download/v0.66.0/tflint_linux_amd64.zip',
+    assetSha256:
+      '22be11cadc25cd02401e94c0ccc91aa63467debb8485c2a755d98f4c0a9d1e2e',
+    member: 'tflint',
+    binarySha256: tflintPin.sha256,
+    source:
+      'https://github.com/terraform-linters/tflint/releases/download/v0.66.0/checksums.txt',
   },
 });

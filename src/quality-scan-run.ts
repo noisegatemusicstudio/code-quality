@@ -1,0 +1,489 @@
+import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { constants } from 'node:fs';
+import {
+  chmod,
+  lstat,
+  mkdtemp,
+  open,
+  rm,
+  writeFile,
+  mkdir,
+} from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join, resolve } from 'node:path';
+import { promisify } from 'node:util';
+import {
+  type AdapterEnvelope,
+  type EnvelopeScope,
+  isValidScope,
+  validateEnvelope,
+} from './adapter-envelope.js';
+import { scanCommittedSource, type ExecutionSlot } from './customer-scan.js';
+import { runEslintScan } from './eslint-adapter.js';
+import {
+  type EngineId,
+  type EngineResult,
+  detectApplicability,
+} from './quality-scan.js';
+import { adapterLimits } from './scanner-adapter.js';
+import {
+  externalPins,
+  osvPin,
+  releaseAssets,
+  trivyPin,
+} from './scanner-pins.js';
+import {
+  releaseReadyRulesVersion,
+  runSemgrepScan,
+  semgrepVersion,
+} from './semgrep-adapter.js';
+import { runTrivyScan, trivyAdapterEngine } from './trivy-adapter.js';
+
+const exec = promisify(execFile);
+const projectEslintConfig =
+  /^(?:eslint\.config\.[cm]?[jt]s|\.eslintrc(?:\.[a-z]+)?|\.eslintignore)$/;
+const baseName = (path: string): string =>
+  path.slice(path.lastIndexOf('/') + 1);
+const sha256 = (bytes: Uint8Array): string =>
+  createHash('sha256').update(bytes).digest('hex');
+
+export type Downloader = (url: string) => Promise<Uint8Array>;
+const maxAssetBytes = 300 * 1024 * 1024;
+export const defaultDownloader: Downloader = async (url) => {
+  if (!url.startsWith('https://')) throw new Error('https only');
+  const response = await fetch(url, { redirect: 'follow' });
+  if (!response.ok) throw new Error(`download failed: ${response.status}`);
+  const bytes = new Uint8Array(await response.arrayBuffer());
+  if (bytes.byteLength > maxAssetBytes) throw new Error('asset too large');
+  return bytes;
+};
+
+export type InstallableEngine = 'gitleaks' | 'trivy' | 'osv' | 'jscpd';
+export const installableEngines: readonly InstallableEngine[] = [
+  'gitleaks',
+  'trivy',
+  'osv',
+  'jscpd',
+];
+
+/**
+ * Download one official release asset, verify its sha256 and (for archives)
+ * the extracted executable's sha256 against the pin, then place it in
+ * `directory`. Anything unexpected throws before a file becomes executable.
+ */
+export async function installEngine(
+  id: InstallableEngine,
+  directory: string,
+  download: Downloader = defaultDownloader,
+): Promise<string> {
+  const asset = releaseAssets[id];
+  const bytes = await download(asset.url);
+  if (sha256(bytes) !== asset.assetSha256)
+    throw new Error(`${id}: asset sha256 mismatch`);
+  const work = await mkdtemp(join(tmpdir(), 'quality-install-'));
+  try {
+    let binary: Uint8Array = bytes;
+    if (asset.member !== null) {
+      const archive = join(work, 'asset.tgz');
+      await writeFile(archive, bytes, { flag: 'wx' });
+      await exec('tar', ['-xzf', archive, '-C', work, asset.member]);
+      const extracted = join(work, asset.member);
+      const info = await lstat(extracted);
+      if (!info.isFile() || info.size > maxAssetBytes)
+        throw new Error(`${id}: unexpected archive member`);
+      binary = new Uint8Array(await readFileNoFollow(extracted));
+    }
+    if (sha256(binary) !== asset.binarySha256)
+      throw new Error(`${id}: binary sha256 mismatch`);
+    await mkdir(directory, { recursive: true });
+    const target = join(directory, id);
+    await writeFile(target, binary, { mode: 0o700 });
+    await chmod(target, 0o700);
+    return target;
+  } finally {
+    await rm(work, { recursive: true, force: true });
+  }
+}
+
+async function readFileNoFollow(path: string): Promise<Buffer> {
+  const handle = await open(path, constants.O_RDONLY | constants.O_NOFOLLOW);
+  try {
+    return await handle.readFile();
+  } finally {
+    await handle.close();
+  }
+}
+
+/** True only when the file at `path` hashes to `expected`. */
+export async function executableMatches(
+  path: string,
+  expected: string,
+): Promise<boolean> {
+  try {
+    return sha256(await readFileNoFollow(resolve(path))) === expected;
+  } catch {
+    return false;
+  }
+}
+
+/** Committed (tracked) paths of a checkout, sorted for deterministic bounding. */
+export async function trackedPaths(repo: string): Promise<string[]> {
+  const { stdout } = await exec('git', ['-C', repo, 'ls-files', '-z'], {
+    maxBuffer: 64 * 1024 * 1024,
+    encoding: 'buffer',
+  });
+  return stdout
+    .toString('utf8')
+    .split('\0')
+    .filter((p) => p !== '')
+    .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+}
+
+export interface BoundedFiles {
+  files: Record<string, string>;
+  /** Matching files that could not be passed to the engine, with no content kept. */
+  omitted: number;
+}
+/**
+ * Read matching tracked files within the adapter's input limits. Symlinks,
+ * non-UTF-8 files and anything over a limit are counted in `omitted`, so the
+ * caller can mark the engine incomplete instead of reporting a false clean.
+ */
+export async function readBoundedFiles(
+  repo: string,
+  paths: readonly string[],
+  match: (path: string) => boolean,
+): Promise<BoundedFiles> {
+  const files: Record<string, string> = {};
+  let omitted = 0;
+  let total = 0;
+  for (const path of paths.filter(match)) {
+    if (Object.keys(files).length >= adapterLimits.files) {
+      omitted += 1;
+      continue;
+    }
+    try {
+      const full = join(repo, path);
+      const info = await lstat(full);
+      if (!info.isFile() || info.size > adapterLimits.fileBytes)
+        throw new Error();
+      if (total + info.size > adapterLimits.totalBytes) throw new Error();
+      const text = new TextDecoder('utf-8', { fatal: true }).decode(
+        await readFileNoFollow(full),
+      );
+      total += info.size;
+      files[path] = text;
+    } catch {
+      omitted += 1;
+    }
+  }
+  return { files, omitted };
+}
+
+const idSafe = (value: string, fallback: string): string => {
+  const cleaned = value.replace(/[^A-Za-z0-9._:-]/g, '-').slice(0, 128);
+  return /^[A-Za-z0-9]/.test(cleaned) ? cleaned : fallback;
+};
+/** Envelope scope from the GitHub Actions environment, with safe fallbacks. */
+export function scopeFromEnvironment(
+  environment: Record<string, string | undefined>,
+  commitSha: string,
+): EnvelopeScope {
+  const repository = environment.GITHUB_REPOSITORY ?? '';
+  const scope: EnvelopeScope = {
+    tenantId: 'github-actions',
+    projectId: idSafe(repository.split('/')[1] ?? '', 'project'),
+    repository: /^[A-Za-z0-9._-]{1,100}\/[A-Za-z0-9._-]{1,100}$/.test(
+      repository,
+    )
+      ? repository
+      : 'local/repository',
+    commitSha,
+    sourceId: 'github-actions',
+    jobId: idSafe(environment.GITHUB_RUN_ID ?? '', 'local'),
+    attemptId: idSafe(environment.GITHUB_RUN_ATTEMPT ?? '', '1'),
+  };
+  if (!isValidScope(scope)) throw new Error('invalid envelope scope');
+  return scope;
+}
+
+const skipped = (
+  engine: EngineId,
+  skipKind: NonNullable<EngineResult['skipKind']>,
+  reason: string,
+): EngineResult => ({
+  engine,
+  status: 'skipped',
+  skipKind,
+  reason,
+  findings: [],
+});
+const failed = (engine: EngineId, reason: string): EngineResult => ({
+  engine,
+  status: 'failed',
+  reason,
+  findings: [],
+});
+
+/**
+ * The adapter wants the exact trimmed `--version` output. Trivy appends its
+ * embedded check-bundle digest after the version line, so read it once under
+ * the same scrubbed environment and insist the first line is the pinned
+ * version (the binary itself is already sha256-pinned).
+ */
+export async function trivyVersionOutput(executable: string): Promise<string> {
+  const { stdout } = await exec(executable, ['--version'], {
+    env: { LANG: 'C', LC_ALL: 'C', TZ: 'UTC' },
+    timeout: 10000,
+  });
+  const output = stdout.trim();
+  if (output.split('\n')[0] !== `Version: ${trivyAdapterEngine.version}`)
+    throw new Error('unexpected trivy version');
+  return output;
+}
+
+/** Map a bounded-input shortfall onto an engine result, never to a clean one. */
+export function applyOmitted(
+  result: EngineResult,
+  omitted: number,
+): EngineResult {
+  if (omitted === 0 || result.status !== 'completed') return result;
+  return {
+    ...result,
+    status: 'incomplete',
+    reason: `${omitted} file(s) exceeded adapter input limits, were unreadable or not UTF-8 and were not scanned`,
+  };
+}
+
+const fromEnvelope = (
+  engine: EngineId,
+  envelope: AdapterEnvelope,
+  version: string,
+): EngineResult => ({
+  engine,
+  status: envelope.status,
+  reason: envelope.reason,
+  version,
+  findings: envelope.findings,
+  envelope,
+  ...(envelope.status === 'skipped'
+    ? { skipKind: 'unavailable' as const }
+    : {}),
+});
+
+/** Map a customer-scan slot (gitleaks/jscpd) onto an engine result. */
+export function fromSlot(
+  engine: 'gitleaks' | 'jscpd',
+  slot: ExecutionSlot,
+  sourceError: string | undefined,
+  scope: EnvelopeScope,
+): EngineResult {
+  const version = externalPins[engine].version;
+  if (sourceError)
+    return {
+      ...failed(engine, `committed snapshot unavailable: ${sourceError}`),
+      version,
+    };
+  const status =
+    slot.state === 'completed' && slot.evidence === 'executed'
+      ? 'completed'
+      : slot.state === 'limited'
+        ? 'incomplete'
+        : 'failed';
+  const findings = status === 'completed' ? (slot.findings ?? []) : [];
+  const result: EngineResult = {
+    engine,
+    status,
+    version,
+    findings,
+    ...(status === 'completed'
+      ? {}
+      : { reason: slot.reason ?? `engine state ${slot.state}` }),
+  };
+  if (status === 'completed') {
+    const checked = validateEnvelope(
+      {
+        schemaVersion: 1,
+        provenance: 'adapter-executed',
+        ...scope,
+        engine: { id: engine, version },
+        rulesetVersion: slot.coverage,
+        configVersion: slot.config ?? 'bundled-v1',
+        status: 'completed',
+        findings,
+      },
+      scope,
+    );
+    result.envelope = checked.ok ? checked.envelope : null;
+  }
+  return result;
+}
+
+export interface RunOptions {
+  repo: string;
+  scope: EnvelopeScope;
+  selected: readonly EngineId[];
+  /** Absolute path of each installed engine binary, if installation worked. */
+  tools: Partial<Record<InstallableEngine | 'semgrep', string>>;
+  /** Install failure reasons, so a missing engine is reported as failed. */
+  installErrors: Partial<Record<EngineId, string>>;
+  gitExecutable: string;
+  rulesDirectory: string;
+}
+
+/** Run every selected engine against the checked-out commit. Never throws. */
+export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
+  const paths = await trackedPaths(options.repo);
+  const applicability = detectApplicability(paths);
+  const out = new Map<EngineId, EngineResult>();
+  const todo = (engine: EngineId): boolean => {
+    if (!options.selected.includes(engine)) {
+      out.set(engine, skipped(engine, 'not-selected', 'not in scanners list'));
+      return false;
+    }
+    const a = applicability[engine];
+    if (!a.applicable) {
+      out.set(engine, skipped(engine, 'not-applicable', a.reason ?? 'n/a'));
+      return false;
+    }
+    return true;
+  };
+  const guard = async (
+    engine: EngineId,
+    run: () => Promise<EngineResult>,
+  ): Promise<void> => {
+    if (!todo(engine)) return;
+    try {
+      out.set(engine, await run());
+    } catch {
+      out.set(engine, failed(engine, 'engine runner threw unexpectedly'));
+    }
+  };
+
+  await guard('eslint', async () => {
+    // The adapter refuses project ESLint configs; leave them out so the bundled
+    // ReleaseReady rules run instead (the project's own rules are not applied).
+    const { files, omitted } = await readBoundedFiles(
+      options.repo,
+      paths,
+      (p) =>
+        /\.(?:[cm]?[jt]s)$/.test(p) && !projectEslintConfig.test(baseName(p)),
+    );
+    const { envelope } = await runEslintScan({ scope: options.scope, files });
+    return applyOmitted(fromEnvelope('eslint', envelope, 'bundled'), omitted);
+  });
+
+  await guard('semgrep', async () => {
+    const executable = options.tools.semgrep;
+    if (!executable)
+      return failed(
+        'semgrep',
+        options.installErrors.semgrep ?? 'semgrep is not installed',
+      );
+    const { files, omitted } = await readBoundedFiles(
+      options.repo,
+      paths,
+      (p) => /\.(?:[cm]?[jt]s|[jt]sx)$/.test(p),
+    );
+    const result = await runSemgrepScan(
+      {
+        executable,
+        ruleset: {
+          source: 'releaseready-authored',
+          path: options.rulesDirectory,
+          version: releaseReadyRulesVersion,
+        },
+        audience: 'customer',
+      },
+      { scope: options.scope, files },
+    );
+    const base = fromEnvelope('semgrep', result.envelope, semgrepVersion);
+    return applyOmitted(
+      result.refusal ? { ...base, reason: result.refusal } : base,
+      omitted,
+    );
+  });
+
+  await guard('trivy', async () => {
+    const executable = options.tools.trivy;
+    if (!executable || !(await executableMatches(executable, trivyPin.sha256)))
+      return failed(
+        'trivy',
+        options.installErrors.trivy ?? 'trivy missing or sha256 mismatch',
+      );
+    const { files, omitted } = await readBoundedFiles(
+      options.repo,
+      paths,
+      (p) =>
+        /(?:\.(?:tf|tfvars|tf\.json|ya?ml|json|toml)|(?:^|\/)(?:Dockerfile|Containerfile)(?:\.[A-Za-z0-9_-]+)?)$/.test(
+          p,
+        ),
+    );
+    const result = await runTrivyScan(
+      {
+        executable,
+        versionOutput: await trivyVersionOutput(executable),
+        mode: 'online',
+      },
+      { scope: options.scope, target: { kind: 'iac', files } },
+    );
+    return applyOmitted(
+      fromEnvelope('trivy', result.envelope, trivyPin.version),
+      omitted,
+    );
+  });
+
+  await guard('osv', () =>
+    Promise.resolve(
+      skipped(
+        'osv',
+        'unavailable',
+        `lockfile found, but the offline-only adapter needs a caller-supplied advisory database and none is provisioned (OSV data redistribution is deferred in docs/scanner-licensing.md; the public npm all.zip archive is not accepted by the database validator); osv-scanner ${osvPin.version} not run`,
+      ),
+    ),
+  );
+
+  // gitleaks and jscpd run through the committed-snapshot API.
+  const snapshotEngines = (['gitleaks', 'jscpd'] as const).filter(todo);
+  if (snapshotEngines.length) {
+    try {
+      const { stdout } = await exec('git', [
+        '-C',
+        options.repo,
+        'rev-parse',
+        '--git-dir',
+      ]);
+      const gitDirectory = resolve(options.repo, stdout.trim());
+      const tools: { gitleaks?: string; jscpd?: string } = {};
+      for (const id of snapshotEngines) {
+        const path = options.tools[id];
+        if (path && (await executableMatches(path, externalPins[id].sha256)))
+          tools[id] = path;
+      }
+      const report = await scanCommittedSource({
+        gitExecutable: options.gitExecutable,
+        gitDirectory,
+        commitSha: options.scope.commitSha,
+        tools,
+        detailedFindings: true,
+      });
+      for (const id of snapshotEngines) {
+        const slot = report.scanners.find((s) => s.id === id);
+        if (!tools[id])
+          out.set(
+            id,
+            failed(id, options.installErrors[id] ?? 'engine not installed'),
+          );
+        else if (!slot) out.set(id, failed(id, 'no result from scan'));
+        else out.set(id, fromSlot(id, slot, report.sourceError, options.scope));
+      }
+    } catch {
+      for (const id of snapshotEngines)
+        out.set(id, failed(id, 'committed-snapshot scan threw unexpectedly'));
+    }
+  }
+  return (
+    ['eslint', 'gitleaks', 'osv', 'trivy', 'semgrep', 'jscpd'] as const
+  ).map((id) => out.get(id) ?? failed(id, 'no result'));
+}

@@ -65,6 +65,8 @@ export interface ScannerAdapter {
    * successful exit, and `parse` receives its content instead of stdout.
    */
   outputFile?: { path: string; maxBytes: number };
+  /** Engine needs base tools (for example `uname`): run with a fixed system PATH. */
+  systemPath?: boolean;
   /** Run before the scan; its trimmed stdout must equal `versionOutput`. */
   versionArgs: readonly string[];
   versionOutput: string;
@@ -257,6 +259,7 @@ export async function runAdapter(
       timeoutMs: Math.min(timeoutMs, 10000),
       outputLimit: 4096,
       signal: request.signal,
+      systemPath: adapter.systemPath,
     });
     if (version.state === 'cancelled') return build('incomplete', 'cancelled');
     if (
@@ -272,6 +275,7 @@ export async function runAdapter(
       timeoutMs,
       outputLimit: adapterLimits.stdoutBytes,
       signal: request.signal,
+      systemPath: adapter.systemPath,
     });
     switch (run.state) {
       case 'cancelled':

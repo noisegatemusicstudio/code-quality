@@ -9,6 +9,8 @@ export interface ProcessRequest {
   outputLimit: number;
   /** Optional caller cancellation: stops the whole supervised group. */
   signal?: AbortSignal;
+  /** Opt in to a fixed system PATH (`/usr/bin:/bin`) for engines that spawn base tools. */
+  systemPath?: boolean;
 }
 export type ProcessOutcome =
   | { state: 'exited'; code: number; stdout: Buffer }
@@ -83,6 +85,7 @@ export async function runScannerProcess(
         shell: false,
         stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
         env: {
+          ...(request.systemPath ? { PATH: '/usr/bin:/bin' } : {}),
           LANG: 'C',
           LC_ALL: 'C',
           TZ: 'UTC',

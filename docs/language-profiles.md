@@ -127,8 +127,9 @@ default `high` equals the gate's.
 Every run lists the languages found with file counts. A language without a
 language-aware engine is reported as `skipped: no engine yet`, in both
 `summary.md` and `report.json` (`languages`). Today only TypeScript and
-JavaScript (ESLint, Semgrep), Python (Ruff), Dockerfile and Terraform (Trivy)
-count as covered; gitleaks, OSV and jscpd are language-agnostic and not counted.
+JavaScript (ESLint, Semgrep), Python (Ruff), Shell (ShellCheck, shfmt), GitHub Actions
+workflows (actionlint, zizmor), Dockerfile (Trivy, hadolint), Terraform (Trivy,
+tflint), YAML (yamllint) and Markdown (markdownlint) count as covered; gitleaks, OSV and jscpd are language-agnostic and not counted.
 
 ## 5. Jira mapping
 
@@ -145,14 +146,14 @@ count as covered; gitleaks, OSV and jscpd are language-agnostic and not counted.
 2. Python: Ruff and mypy adapters (RRDSCRUM-187). **Done:** Ruff 0.17.4 runs
    from a bundled isolated config and is sha256-pinned; mypy is reported
    `skipped: needs dependency environment` (see `docs/scanner-licensing.md`).
-3. Shell: ShellCheck and shfmt (RRDSCRUM-188).
-4. GitHub Actions: actionlint and zizmor (cheap, MIT, we already ship workflows).
-5. Dockerfile: hadolint (GPL, internal runs first).
-6. Terraform: tflint beside Trivy.
+3. Shell: ShellCheck and shfmt (RRDSCRUM-188). **Done**: pinned, severity-mapped.
+4. GitHub Actions: actionlint and zizmor (cheap, MIT, we already ship workflows). **Done**: pinned, zizmor offline.
+5. Dockerfile: hadolint (GPL, internal runs first). **Done.**
+6. Terraform: tflint beside Trivy. **Done** (bundled terraform ruleset, no plugins).
 7. Kotlin: detekt and ktlint (RRDSCRUM-186).
 8. Java: PMD, Checkstyle, SpotBugs + FindSecBugs (RRDSCRUM-185; needs a build).
 9. Swift: SwiftLint (needs a Swift runner).
-10. YAML and Markdown: yamllint and markdownlint.
+10. YAML and Markdown: yamllint and markdownlint. **Done.**
 11. Prettier check as an engine for TS/JS and the formats above.
 12. New-code coverage and duplication measures wired into the gate, then flip
     `onUnknown` to `fail`.

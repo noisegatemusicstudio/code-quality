@@ -36,6 +36,42 @@ export const osvPin = immutableMetadata({
   },
 });
 
+/**
+ * Lint engines run through `runAdapter` on an explicit file list (Shell and
+ * GitHub Actions workflows). ShellCheck is GPL-3.0: it runs only as a separate,
+ * unbundled binary and is "customer: needs review" in docs/scanner-licensing.md.
+ */
+export const lintPins = immutableMetadata({
+  shellcheck: {
+    version: '0.11.0',
+    license: 'GPL-3.0',
+    sha256: '4da528ddb3a4d1b7b24a59d4e16eb2f5fd960f4bd9a3708a15baddbdf1d5a55b',
+    coverage:
+      'Tracked .sh/.bash/.ksh files, default checks at every severity, no rc file; sourced files are not followed',
+  },
+  shfmt: {
+    version: '3.14.1',
+    license: 'BSD-3-Clause',
+    sha256: '76e77641faa025814b77f153b29796b8e6fa2fca03e0c76a691608b86c7ea7bf',
+    coverage:
+      'Tracked .sh/.bash/.ksh files, diff mode (-d) with -i 2 -ci, never rewrites; a file shfmt cannot parse yields no shfmt finding (ShellCheck reports syntax errors)',
+  },
+  actionlint: {
+    version: '1.7.12',
+    license: 'MIT',
+    sha256: 'c872d6db8c6bf83a8eaa704fc93999f027d55dffbc63b8a6abdccb47df5f4cd4',
+    coverage:
+      'Tracked .github/workflows/*.yml|yaml, bundled defaults, no actionlint config; embedded ShellCheck/pyflakes integrations do not run',
+  },
+  zizmor: {
+    version: '1.32.0',
+    license: 'MIT',
+    sha256: '04d55fb88e582a8e9a9ce6b4753df723fc44c35e0d1a8e8771db9e017066c6df',
+    coverage:
+      'Tracked .github/workflows/*.yml|yaml, --offline: no GitHub API call, no token; online-only audits do not run',
+  },
+});
+
 /** Pinned engines that are not run through `runExternalScanner`. */
 export const trivyPin = immutableMetadata({
   version: '0.76.2',
@@ -67,6 +103,45 @@ export const mypyPin = immutableMetadata({
   license: 'MIT',
   skipReason:
     'needs dependency environment: mypy --strict needs the project dependencies installed, and a scan never installs project dependencies or runs project code, so it cannot give a trustworthy result',
+});
+
+/** Lint engines added after the first set; all run with bundled defaults only. */
+export const hadolintPin = immutableMetadata({
+  version: '2.15.1',
+  license: 'GPL-3.0',
+  sha256: 'c7187db94eeeeca956519a6af171adc31453941a1e777961f6e680f697c8c507',
+  coverage:
+    'Dockerfile/Containerfile syntax and best-practice rules (bundled defaults, no .hadolint.yaml); no image build, no ShellCheck-free guarantee',
+});
+export const tflintPin = immutableMetadata({
+  version: '0.66.0',
+  license: 'MPL-2.0',
+  sha256: '8f33a3e34dd83cd4bf43646f2e8492d4d5bb8941036a9ae517b611e56004e70d',
+  coverage:
+    'Terraform *.tf only, bundled terraform ruleset (no plugin download, no provider rulesets, no .tflint.hcl); no plan/apply',
+});
+export const yamllintPin = immutableMetadata({
+  version: '1.38.0',
+  license: 'GPL-3.0',
+  /** Hash-locked dependency set installed with --require-hashes. */
+  requirements: 'scanners/yamllint-requirements.txt',
+  /** sha256 of the yamllint py3-none-any wheel (PyPI), also in the lock. */
+  wheelSha256:
+    'fc394a5b3be980a4062607b8fdddc0843f4fa394152b6da21722f5d59013c220',
+  coverage:
+    'YAML syntax and the yamllint `default` preset (no .yamllint config); no schema validation',
+});
+export const markdownlintPin = immutableMetadata({
+  version: '0.24.1',
+  license: 'MIT',
+  /** markdownlint-cli2 0.24.1 bundles markdownlint 0.42.1; integrity comes from package-lock.json. */
+  engineVersion: '0.42.1',
+  /** sha256 of node_modules/markdownlint-cli2/markdownlint-cli2-bin.mjs. */
+  sha256: '558a203f7c5deb0e2d4f309ed468e0454218427e57f196876cbbdd393678d772',
+  npmIntegrity:
+    'sha512-nLhes/MIPJQLm+Gmh+3jQEnwMOaalaN0wfCD2qz1247zNZ7R3r2WDHJB191x4hcy6soKAUTybp1bFK7aJGw/WA==',
+  coverage:
+    'Markdown files, markdownlint default rules (no project config, no custom rules or plugins)',
 });
 
 /**
@@ -119,5 +194,57 @@ export const releaseAssets = immutableMetadata({
     binarySha256: ruffPin.sha256,
     source:
       'https://github.com/astral-sh/ruff/releases/download/0.17.4/ruff-x86_64-unknown-linux-gnu.tar.gz.sha256',
+  },
+  shellcheck: {
+    url: 'https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz',
+    assetSha256:
+      '8c3be12b05d5c177a04c29e3c78ce89ac86f1595681cab149b65b97c4e227198',
+    member: 'shellcheck-v0.11.0/shellcheck',
+    binarySha256: lintPins.shellcheck.sha256,
+    source:
+      'No upstream checksum file is published for v0.11.0; sha256 computed from the official release asset downloaded 2026-11-12',
+  },
+  shfmt: {
+    url: 'https://github.com/mvdan/sh/releases/download/v3.14.1/shfmt_v3.14.1_linux_amd64',
+    assetSha256: lintPins.shfmt.sha256,
+    member: null,
+    binarySha256: lintPins.shfmt.sha256,
+    source:
+      'No upstream checksum file is published for v3.14.1; sha256 computed from the official release asset downloaded 2026-11-12',
+  },
+  actionlint: {
+    url: 'https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz',
+    assetSha256:
+      '8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8',
+    member: 'actionlint',
+    binarySha256: lintPins.actionlint.sha256,
+    source:
+      'https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_checksums.txt',
+  },
+  zizmor: {
+    url: 'https://github.com/zizmorcore/zizmor/releases/download/v1.32.0/zizmor-x86_64-unknown-linux-gnu.tar.gz',
+    assetSha256:
+      'bb110cc765eca9cd7efb2e284a956be5974c60027b0970f16397d86208a9957b',
+    member: 'zizmor',
+    binarySha256: lintPins.zizmor.sha256,
+    source:
+      'No upstream checksum file is published for v1.32.0; sha256 computed from the official release asset downloaded 2026-11-12',
+  },
+  hadolint: {
+    url: 'https://github.com/hadolint/hadolint/releases/download/v2.15.1/hadolint-linux-x86_64',
+    assetSha256: hadolintPin.sha256,
+    member: null,
+    binarySha256: hadolintPin.sha256,
+    source:
+      'sha256 computed from the release asset downloaded over TLS from github.com (upstream publishes no checksum file for v2.15.1)',
+  },
+  tflint: {
+    url: 'https://github.com/terraform-linters/tflint/releases/download/v0.66.0/tflint_linux_amd64.zip',
+    assetSha256:
+      '22be11cadc25cd02401e94c0ccc91aa63467debb8485c2a755d98f4c0a9d1e2e',
+    member: 'tflint',
+    binarySha256: tflintPin.sha256,
+    source:
+      'https://github.com/terraform-linters/tflint/releases/download/v0.66.0/checksums.txt',
   },
 });

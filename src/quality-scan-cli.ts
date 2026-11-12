@@ -166,6 +166,17 @@ async function run(args: string[]): Promise<number> {
   if (semgrep) tools.semgrep = resolve(semgrep);
   else
     errors.semgrep = option(args, 'semgrep-error') ?? 'semgrep not installed';
+  const yamllint = option(args, 'yamllint');
+  if (yamllint) tools.yamllint = resolve(yamllint);
+  else
+    errors.yamllint =
+      option(args, 'yamllint-error') ?? 'yamllint not installed';
+  const markdownlint = option(args, 'markdownlint-cli2');
+  if (markdownlint) tools.markdownlint = resolve(markdownlint);
+  else
+    errors.markdownlint =
+      option(args, 'markdownlint-cli2-error') ??
+      'markdownlint-cli2 not installed';
   const { stdout: head } = await exec('git', ['-C', repo, 'rev-parse', 'HEAD']);
   const commitSha = head.trim();
   const gitExecutable = (

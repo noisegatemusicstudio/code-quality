@@ -1,4 +1,10 @@
 import type { AdapterEnvelope, AdapterFinding } from './adapter-envelope.js';
+import {
+  isDockerfile,
+  isMarkdownFile,
+  isTerraformFile,
+  isYamlFile,
+} from './lint-adapters.js';
 import { renderLanguages, type LanguageReport } from './language-detection.js';
 
 /** Engines the reusable `quality-scan` workflow can run, in report order. */
@@ -11,6 +17,14 @@ export const engineIds = [
   'jscpd',
   'ruff',
   'mypy',
+  'shellcheck',
+  'shfmt',
+  'actionlint',
+  'zizmor',
+  'hadolint',
+  'tflint',
+  'yamllint',
+  'markdownlint',
 ] as const;
 export type EngineId = (typeof engineIds)[number];
 export type EngineStatus = 'completed' | 'failed' | 'incomplete' | 'skipped';
@@ -79,6 +93,8 @@ const isEngine = (value: string): value is EngineId =>
 const eslintExtension = /\.(?:[cm]?[jt]s)$/;
 const semgrepExtension = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 const pythonExtension = /\.pyi?$/;
+const shellFile = /\.(?:sh|bash|ksh)$/;
+const workflowFile = /(?:^|\/)\.github\/workflows\/[^/]+\.ya?ml$/;
 const iacFile =
   /(?:\.(?:tf|tfvars|tf\.json|ya?ml|json|toml)|(?:^|\/)(?:Dockerfile|Containerfile)(?:\.[A-Za-z0-9_-]+)?)$/;
 /** Lockfiles osv-scanner understands; the offline adapter itself is npm-only. */
@@ -130,6 +146,18 @@ export function detectApplicability(
       : no('no JavaScript or TypeScript files'),
     ruff: some((p) => pythonExtension.test(p)) ? yes : no('no Python files'),
     mypy: some((p) => pythonExtension.test(p)) ? yes : no('no Python files'),
+    shellcheck: some((p) => shellFile.test(p)) ? yes : no('no shell scripts'),
+    shfmt: some((p) => shellFile.test(p)) ? yes : no('no shell scripts'),
+    actionlint: some((p) => workflowFile.test(p))
+      ? yes
+      : no('no GitHub Actions workflows'),
+    zizmor: some((p) => workflowFile.test(p))
+      ? yes
+      : no('no GitHub Actions workflows'),
+    hadolint: some(isDockerfile) ? yes : no('no Dockerfile or Containerfile'),
+    tflint: some(isTerraformFile) ? yes : no('no Terraform (.tf) files'),
+    yamllint: some(isYamlFile) ? yes : no('no YAML files'),
+    markdownlint: some(isMarkdownFile) ? yes : no('no Markdown files'),
   };
 }
 
@@ -145,6 +173,20 @@ export function normaliseSeverity(
   const label = nativeSeverity.toLowerCase();
   if (engine === 'gitleaks') return 'critical';
   if (engine === 'jscpd') return 'info';
+  // ShellCheck levels. shfmt only reports formatting. actionlint reports
+  // workflow errors without a native level. zizmor labels go through the table.
+  if (engine === 'shellcheck')
+    return label === 'error'
+      ? 'high'
+      : label === 'warning'
+        ? 'medium'
+        : label === 'info'
+          ? 'low'
+          : label === 'style'
+            ? 'info'
+            : 'high';
+  if (engine === 'shfmt') return 'info';
+  if (engine === 'actionlint') return 'medium';
   if (engine === 'eslint')
     return label === 'error' ? 'medium' : label === 'warn' ? 'low' : 'high';
   if (engine === 'semgrep')
@@ -165,6 +207,19 @@ export function normaliseSeverity(
     };
     return ruff[label] ?? 'high';
   }
+  // Lint engines: errors are medium, warnings low, notices and style info.
+  // markdownlint has no native levels (recorded as `error`), so it ranks low.
+  if (engine === 'markdownlint') return label === 'error' ? 'low' : 'high';
+  if (engine === 'hadolint' || engine === 'tflint' || engine === 'yamllint') {
+    const lint: Record<string, Severity> = {
+      error: 'medium',
+      warning: 'low',
+      notice: 'info',
+      info: 'info',
+      style: 'info',
+    };
+    return lint[label] ?? 'high';
+  }
   const table: Record<string, Severity> = {
     critical: 'critical',
     high: 'high',
@@ -172,6 +227,7 @@ export function normaliseSeverity(
     moderate: 'medium',
     low: 'low',
     info: 'info',
+    informational: 'info',
   };
   return table[label] ?? 'high';
 }

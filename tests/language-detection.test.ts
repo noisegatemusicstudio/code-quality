@@ -48,13 +48,29 @@ await test('Python is covered by Ruff, not skipped', () => {
 
 await test('languages without an engine are skipped, never clean', () => {
   const byName = new Map(detectLanguages(paths).map((l) => [l.language, l]));
-  for (const name of ['Kotlin', 'Shell', 'YAML', 'Markdown']) {
+  for (const name of ['Kotlin']) {
     assert.equal(byName.get(name)?.status, 'skipped: no engine yet', name);
     assert.deepEqual(byName.get(name)?.engines, []);
   }
   assert.equal(byName.get('TypeScript')?.status, 'covered');
   assert.deepEqual(byName.get('TypeScript')?.engines, ['eslint', 'semgrep']);
-  assert.equal(byName.get('Terraform')?.status, 'covered');
+  for (const name of ['Terraform', 'Dockerfile', 'YAML', 'Markdown'])
+    assert.equal(byName.get(name)?.status, 'covered', name);
+});
+
+await test('Shell and GitHub Actions workflows count as covered', () => {
+  const byName = new Map(detectLanguages(paths).map((l) => [l.language, l]));
+  assert.equal(byName.get('Shell')?.status, 'covered');
+  assert.deepEqual(byName.get('Shell')?.engines, ['shellcheck', 'shfmt']);
+  assert.equal(byName.get('GitHub Actions')?.status, 'covered');
+  assert.deepEqual(byName.get('GitHub Actions')?.engines, [
+    'actionlint',
+    'zizmor',
+  ]);
+  assert.equal(
+    detectLanguages(['ci.yml']).some((l) => l.language === 'GitHub Actions'),
+    false,
+  );
 });
 
 await test('the summary shows unsupported languages explicitly', async () => {

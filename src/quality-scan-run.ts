@@ -11,7 +11,7 @@ import {
   mkdir,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import {
   type AdapterEnvelope,
@@ -25,6 +25,7 @@ import {
   type EngineId,
   type EngineResult,
   type OsvMode,
+  engineIds,
   detectApplicability,
 } from './quality-scan.js';
 import {
@@ -32,14 +33,37 @@ import {
   classifyGitleaksEnvelope,
 } from './gitleaks-adapter.js';
 import { ruffVersion, runRuffScan } from './ruff-adapter.js';
+import {
+  type LintEngineId,
+  lintAdapter,
+  lintEngines,
+  pinnedVersionOutput,
+  planBatches,
+} from './lint-engines.js';
 import { osvLockfileNames, runOsvScan } from './osv-adapter.js';
-import { adapterLimits } from './scanner-adapter.js';
+import {
+  hadolintAdapter,
+  isDockerfile,
+  isMarkdownFile,
+  isTerraformFile,
+  isYamlFile,
+  markdownlintAdapter,
+  markdownlintSupportFiles,
+  tflintAdapter,
+  yamllintAdapter,
+} from './lint-adapters.js';
+import { adapterLimits, runAdapter } from './scanner-adapter.js';
 import {
   externalPins,
+  hadolintPin,
+  markdownlintPin,
+  lintPins,
   osvPin,
   mypyPin,
   releaseAssets,
+  tflintPin,
   trivyPin,
+  yamllintPin,
 } from './scanner-pins.js';
 import {
   releaseReadyRulesVersion,
@@ -71,13 +95,27 @@ export const defaultDownloader: Downloader = async (url) => {
   return bytes;
 };
 
-export type InstallableEngine = 'gitleaks' | 'trivy' | 'osv' | 'jscpd' | 'ruff';
+export type InstallableEngine =
+  | 'gitleaks'
+  | 'trivy'
+  | 'osv'
+  | 'jscpd'
+  | 'ruff'
+  | 'hadolint'
+  | 'tflint'
+  | LintEngineId;
 export const installableEngines: readonly InstallableEngine[] = [
   'gitleaks',
   'trivy',
   'osv',
   'jscpd',
   'ruff',
+  'shellcheck',
+  'shfmt',
+  'actionlint',
+  'zizmor',
+  'hadolint',
+  'tflint',
 ];
 
 /**
@@ -98,9 +136,11 @@ export async function installEngine(
   try {
     let binary: Uint8Array = bytes;
     if (asset.member !== null) {
-      const archive = join(work, 'asset.tgz');
+      const zip = asset.url.endsWith('.zip');
+      const archive = join(work, zip ? 'asset.zip' : 'asset.tgz');
       await writeFile(archive, bytes, { flag: 'wx' });
-      await exec('tar', ['-xzf', archive, '-C', work, asset.member]);
+      if (zip) await exec('unzip', ['-q', archive, asset.member, '-d', work]);
+      else await exec('tar', ['-xf', archive, '-C', work, asset.member]);
       const extracted = join(work, asset.member);
       const info = await lstat(extracted);
       if (!info.isFile() || info.size > maxAssetBytes)
@@ -287,6 +327,24 @@ export async function trivyVersionOutput(executable: string): Promise<string> {
   return output;
 }
 
+/**
+ * Read `--version` once under the scrubbed environment and insist it names the
+ * pinned version (the binary or wheel is already hash-pinned).
+ */
+export async function lintVersionOutput(
+  executable: string,
+  expectedVersion: string,
+): Promise<string> {
+  const { stdout } = await exec(executable, ['--version'], {
+    env: { LANG: 'C', LC_ALL: 'C', TZ: 'UTC' },
+    timeout: 10000,
+  });
+  const output = stdout.trim();
+  if (!output.includes(expectedVersion))
+    throw new Error('unexpected engine version');
+  return output;
+}
+
 /** Name the files ESLint could not parse so an incomplete result is actionable. */
 export function withParseFailures(
   result: EngineResult,
@@ -389,7 +447,9 @@ export interface RunOptions {
   scope: EnvelopeScope;
   selected: readonly EngineId[];
   /** Absolute path of each installed engine binary, if installation worked. */
-  tools: Partial<Record<InstallableEngine | 'semgrep', string>>;
+  tools: Partial<
+    Record<InstallableEngine | 'semgrep' | 'yamllint' | 'markdownlint', string>
+  >;
   /** Install failure reasons, so a missing engine is reported as failed. */
   installErrors: Partial<Record<EngineId, string>>;
   gitExecutable: string;
@@ -559,6 +619,54 @@ export async function loadExceptions(input: {
   };
 }
 
+/**
+ * Run one file-list lint engine (ShellCheck, shfmt, actionlint, zizmor) in
+ * batches the adapter's argument limit allows. Files that cannot be passed
+ * (unreadable, over limits, unusable name) make the result incomplete.
+ */
+async function runLintEngine(
+  id: LintEngineId,
+  options: RunOptions,
+  paths: readonly string[],
+): Promise<EngineResult> {
+  const spec = lintEngines[id];
+  const executable = options.tools[id];
+  if (
+    !executable ||
+    !(await executableMatches(executable, lintPins[id].sha256))
+  )
+    return failed(
+      id,
+      options.installErrors[id] ?? `${id} missing or sha256 mismatch`,
+    );
+  const { files, omitted, causes } = await readBoundedFiles(
+    options.repo,
+    paths,
+    spec.matches,
+  );
+  const { batches, unusable } = planBatches(Object.keys(files));
+  const versionOutput = await pinnedVersionOutput(
+    executable,
+    spec.versionArgs,
+    lintPins[id].version,
+  );
+  const envelopes: AdapterEnvelope[] = [];
+  for (const batch of batches)
+    envelopes.push(
+      await runAdapter(lintAdapter(spec, executable, versionOutput, batch), {
+        scope: options.scope,
+        files: Object.fromEntries(batch.map((p) => [p, files[p] ?? ''])),
+        args: batch,
+      }),
+    );
+  if (!envelopes.length && !unusable.length && !omitted)
+    return failed(id, 'no files to scan');
+  const base = envelopes.length
+    ? fromEnvelope(id, mergeEnvelopes(envelopes), lintPins[id].version)
+    : failed(id, 'no file could be passed to the engine');
+  return applyOmitted(base, omitted + unusable.length, causes);
+}
+
 /** Run every selected engine against the checked-out commit. Never throws. */
 export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
   const paths = await trackedPaths(options.repo);
@@ -699,6 +807,131 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     );
   });
 
+  const lintFiles = async (match: (p: string) => boolean) =>
+    readBoundedFiles(options.repo, paths, match);
+  const lintResult = async (
+    engine: EngineId,
+    version: string,
+    adapter: Parameters<typeof runAdapter>[0],
+    files: Record<string, string>,
+    args: readonly string[],
+  ): Promise<EngineResult> =>
+    fromEnvelope(
+      engine,
+      await runAdapter(adapter, { scope: options.scope, files, args }),
+      version,
+    );
+
+  await guard('hadolint', async () => {
+    const executable = options.tools.hadolint;
+    if (
+      !executable ||
+      !(await executableMatches(executable, hadolintPin.sha256))
+    )
+      return failed(
+        'hadolint',
+        options.installErrors.hadolint ?? 'hadolint missing or sha256 mismatch',
+      );
+    const { files, omitted, causes } = await lintFiles(isDockerfile);
+    const versionOutput = await lintVersionOutput(
+      executable,
+      hadolintPin.version,
+    );
+    const names = Object.keys(files);
+    const envelopes: AdapterEnvelope[] = [];
+    // The adapter allows at most 32 arguments per run.
+    for (let i = 0; i < names.length; i += 30) {
+      const chunk = names.slice(i, i + 30);
+      const adapter = hadolintAdapter({
+        executable,
+        versionOutput,
+        files: new Set(chunk),
+      });
+      envelopes.push(
+        await runAdapter(adapter, {
+          scope: options.scope,
+          files: Object.fromEntries(chunk.map((n) => [n, files[n] ?? ''])),
+          args: chunk,
+        }),
+      );
+    }
+    if (!envelopes.length)
+      return skipped('hadolint', 'not-applicable', 'no readable Dockerfile');
+    return applyOmitted(
+      fromEnvelope('hadolint', mergeEnvelopes(envelopes), hadolintPin.version),
+      omitted,
+      causes,
+    );
+  });
+
+  await guard('tflint', async () => {
+    const executable = options.tools.tflint;
+    if (!executable || !(await executableMatches(executable, tflintPin.sha256)))
+      return failed(
+        'tflint',
+        options.installErrors.tflint ?? 'tflint missing or sha256 mismatch',
+      );
+    const { files, omitted, causes } = await lintFiles(isTerraformFile);
+    const adapter = tflintAdapter({
+      executable,
+      versionOutput: await lintVersionOutput(executable, tflintPin.version),
+      files: new Set(Object.keys(files)),
+    });
+    return applyOmitted(
+      await lintResult('tflint', tflintPin.version, adapter, files, []),
+      omitted,
+      causes,
+    );
+  });
+
+  await guard('yamllint', async () => {
+    const executable = options.tools.yamllint;
+    if (!executable)
+      return failed(
+        'yamllint',
+        options.installErrors.yamllint ?? 'yamllint is not installed',
+      );
+    const { files, omitted, causes } = await lintFiles(isYamlFile);
+    const adapter = yamllintAdapter({
+      executable,
+      versionOutput: await lintVersionOutput(executable, yamllintPin.version),
+      files: new Set(Object.keys(files)),
+    });
+    return applyOmitted(
+      await lintResult('yamllint', yamllintPin.version, adapter, files, []),
+      omitted,
+      causes,
+    );
+  });
+
+  await guard('markdownlint', async () => {
+    const script = options.tools.markdownlint;
+    if (!script || !(await executableMatches(script, markdownlintPin.sha256)))
+      return failed(
+        'markdownlint',
+        options.installErrors.markdownlint ??
+          'markdownlint-cli2 missing or sha256 mismatch',
+      );
+    const { files, omitted, causes } = await lintFiles(isMarkdownFile);
+    const adapter = markdownlintAdapter({
+      node: process.execPath,
+      script,
+      packageJson: join(dirname(script), 'package.json'),
+      files: new Set(Object.keys(files)),
+    });
+    return applyOmitted(
+      await lintResult(
+        'markdownlint',
+        markdownlintPin.version,
+        adapter,
+        { ...files, ...markdownlintSupportFiles },
+        [],
+      ),
+      omitted,
+      causes,
+    );
+  });
+
   await guard('osv', async () => {
     const mode = options.osvMode ?? 'online';
     if (mode === 'off')
@@ -763,6 +996,9 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     return disclosure ? { ...result, disclosure } : result;
   });
 
+  for (const id of Object.keys(lintEngines) as LintEngineId[])
+    await guard(id, () => runLintEngine(id, options, paths));
+
   // gitleaks and jscpd run through the committed-snapshot API.
   const snapshotEngines = (['gitleaks', 'jscpd'] as const).filter(todo);
   if (snapshotEngines.length) {
@@ -813,16 +1049,5 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
         out.set(id, failed(id, 'committed-snapshot scan threw unexpectedly'));
     }
   }
-  return (
-    [
-      'eslint',
-      'gitleaks',
-      'osv',
-      'trivy',
-      'semgrep',
-      'jscpd',
-      'ruff',
-      'mypy',
-    ] as const
-  ).map((id) => out.get(id) ?? failed(id, 'no result'));
+  return engineIds.map((id) => out.get(id) ?? failed(id, 'no result'));
 }

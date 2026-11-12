@@ -632,8 +632,9 @@ await test('Java is covered by PMD and Checkstyle in language detection', () => 
   const java = detectLanguages(['app/Main.java']).find(
     (l) => l.language === 'Java',
   );
-  assert.equal(java?.status, 'covered');
-  assert.deepEqual(java?.engines, ['pmd', 'checkstyle']);
+  assert.ok(java);
+  assert.equal(java.status, 'covered');
+  assert.deepEqual(java.engines, ['pmd', 'checkstyle']);
 });
 
 await test('JDK launcher: explicit path wins, JAVA_HOME is used, and a missing JDK is an error', async () => {

@@ -1,0 +1,27 @@
+# Copyright (c) 2026 ReleaseReady. All rights reserved.
+# ReleaseReady-authored Semgrep rule (RRDSCRUM-133). Written from scratch; not
+# copied or derived from the Semgrep Registry or any other third-party rule set.
+# Ruleset version: 2026.11.1
+rules:
+  - id: releaseready.js.unsafe-innerhtml
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Non-literal markup is assigned to innerHTML, outerHTML or insertAdjacentHTML, which can enable cross-site scripting.
+    patterns:
+      - pattern-either:
+          - pattern: $EL.innerHTML = $X
+          - pattern: $EL.outerHTML = $X
+          - pattern: $EL.insertAdjacentHTML($POS, $X)
+      - pattern-not: $EL.innerHTML = "..."
+      - pattern-not: $EL.outerHTML = "..."
+      - pattern-not: '$EL.insertAdjacentHTML($POS, "...")'
+    metadata:
+      category: security
+      cwe: 'CWE-79: Improper Neutralization of Input During Web Page Generation'
+      confidence: MEDIUM
+      finding-type: vulnerability
+      remediation: 'Assign text with textContent, or sanitize the markup with a reviewed sanitizer before insertion.'
+      author: ReleaseReady
+      license: 'Proprietary, all rights reserved (ReleaseReady-authored)'
+      version: '1'
+      ruleset-version: '2026.11.1'

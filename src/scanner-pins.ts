@@ -123,7 +123,7 @@ export const ktlintPin = immutableMetadata({
 export const swiftlintPin = immutableMetadata({
   version: '0.65.1',
   license: 'MIT',
-  sha256: '3384e7a44d6f2b6f9820404111e2a777b08ba99de087979ed40f6832efc073f5',
+  sha256: 'ad74a829e43f6842e20556c9dab0b536bf53a524c4412f826cd42785c30a2b29',
   coverage:
     'SwiftLint default rules on tracked .swift files; the repository .swiftlint.yml is honoured only when it is plain YAML data (no URL, parent_config, child_config or tag), otherwise the bundled config applies; no analyzer rules, no swift build',
 });

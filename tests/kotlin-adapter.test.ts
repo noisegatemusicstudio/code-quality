@@ -5,13 +5,13 @@ Evidence: synthetic
 Scope: Proves detekt and ktlint report parsing, severity mapping, fixed arguments, the sha256 pin guard, the Java-missing skip and the no-Kotlin skip by running a fake java through runAdapter and runEngines on synthetic Kotlin sources; does not run the real detekt or ktlint jars (the pull request's quality scan job does).
 */
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { writeFakeExecutable } from './fake-executable.js';
+import { commitRepo as makeRepo } from './synthetic-repo.js';
 import { jvmFlags } from '../src/java-runtime.js';
 import { runAdapter } from '../src/scanner-adapter.js';
 import {
@@ -281,25 +281,8 @@ await test('Kotlin files make detekt and ktlint applicable; other repos skip the
   assert.equal(none.ktlint.applicable, false);
 });
 
-const commitRepo = async (name: string, content: string) => {
-  const repo = await mkdtemp(join(tmpdir(), 'kotlin-repo-'));
-  const git = (...args: string[]) =>
-    execFileSync('git', ['-C', repo, ...args], { stdio: 'pipe' });
-  git('init', '-q');
-  await writeFile(join(repo, name), content);
-  git('add', '.');
-  git(
-    '-c',
-    'user.email=t@example.com',
-    '-c',
-    'user.name=t',
-    'commit',
-    '-q',
-    '-m',
-    'x',
-  );
-  return repo;
-};
+const commitRepo = (name: string, content: string) =>
+  makeRepo('kotlin-repo-', name, content);
 const selected: EngineId[] = ['detekt', 'ktlint'];
 const scanRepo = async (repo: string, java?: string) =>
   (

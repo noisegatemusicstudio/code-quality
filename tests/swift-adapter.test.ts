@@ -5,12 +5,12 @@ Evidence: synthetic
 Scope: Proves SwiftLint report parsing, severity mapping, fixed arguments, the plain-YAML config guard, the sha256 pin guard, the unrunnable-binary failure, the no-Swift skip (including no download) and the analyze skip by running a fake swiftlint through runAdapter and runEngines on synthetic Swift sources; does not run the real SwiftLint binary (the pull request's quality scan job does).
 */
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
 import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { writeFakeExecutable } from './fake-executable.js';
+import { commitRepo as makeRepo } from './synthetic-repo.js';
 import { runAdapter } from '../src/scanner-adapter.js';
 import {
   bundledSwiftConfig,
@@ -303,25 +303,8 @@ await test('the installer downloads SwiftLint only for a checkout with Swift fil
   assert.equal(installOnDemand.ruff, undefined);
 });
 
-const commitRepo = async (name: string, content: string) => {
-  const repo = await mkdtemp(join(tmpdir(), 'swift-repo-'));
-  const git = (...args: string[]) =>
-    execFileSync('git', ['-C', repo, ...args], { stdio: 'pipe' });
-  git('init', '-q');
-  await writeFile(join(repo, name), content);
-  git('add', '.');
-  git(
-    '-c',
-    'user.email=t@example.com',
-    '-c',
-    'user.name=t',
-    'commit',
-    '-q',
-    '-m',
-    'x',
-  );
-  return repo;
-};
+const commitRepo = (name: string, content: string) =>
+  makeRepo('swift-repo-', name, content);
 const selected: EngineId[] = ['swiftlint', 'swiftlint-analyze'];
 const scanRepo = async (repo: string, tools: { swiftlint?: string } = {}) =>
   (

@@ -39,9 +39,12 @@ const isRecord = (v: unknown): v is Record<string, unknown> =>
 export function swiftConfigProblem(text: string): string | undefined {
   if (Buffer.byteLength(text, 'utf8') > maxConfigBytes)
     return 'larger than 64 KiB';
-  // eslint-disable-next-line no-control-regex -- refusing control characters is the point
-  if (/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/.test(text))
-    return 'contains control characters';
+  for (const ch of text) {
+    const code = ch.codePointAt(0) ?? 0;
+    const allowed = code === 9 || code === 10 || code === 13;
+    if ((code < 32 && !allowed) || code === 127)
+      return 'contains control characters';
+  }
   if (/^\s*-?\s*(?:parent_config|child_config)\s*:/m.test(text))
     return 'refers to another configuration (parent_config or child_config)';
   if (text.includes('://')) return 'contains a URL';

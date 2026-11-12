@@ -501,7 +501,9 @@ jobs:
   `scanners` (comma list or `all`; engines with nothing to scan are skipped),
   `fail-on-severity` (default `high`), `baseline-path` (optional `report.json`
   from an earlier run, enabling the new-vs-baseline column), `osv-mode` (see
-  below).
+  below), `base-ref` (push baseline for new-code measures) and `coverage-report`
+  (repo-relative Istanbul `coverage-final.json`; see
+  `docs/language-profiles.md` section 3).
 - Output: a Markdown job summary (counts per engine; skipped, failed and
   incomplete engines are listed and never shown as clean) and a
   `code-quality-results` artifact, described below.

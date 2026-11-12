@@ -113,14 +113,40 @@ invalid or unreadable gate exits 2). It is modelled on the industry-standard
 | New issues           | none at `high` or `critical` | With a baseline only findings absent from it count; without one every finding counts |
 | Secrets              | 0 findings                   | Any gitleaks finding fails, whatever the severity threshold                          |
 | Required engines     | all must complete            | A failed or incomplete engine fails; a skipped engine is reported, never clean       |
-| New-code coverage    | at least 80%                 | `onUnknown: "report"` today                                                          |
-| New-code duplication | at most 3%                   | `onUnknown: "report"` today                                                          |
+| New-code coverage    | at least 80% (lines)         | Measured from a caller-supplied report; `onUnknown: "report"` today                  |
+| New-code duplication | at most 3%                   | Measured from jscpd over the changed lines; `onUnknown: "report"` today              |
 
-Coverage and duplication are shown as thresholds but the workflow does not yet
-measure new-code percentages, so a missing measure is reported and does not
-block. Set `onUnknown` to `"fail"` once slice 12 lands. `--fail-on-severity`
-(the workflow input) still overrides only the new-issue threshold; the workflow
-default `high` equals the gate's.
+### New-code measures (slice 12)
+
+The CLI measures new code against an explicit base, read from git in the
+scanned checkout with no network access:
+
+- **Pull requests** use the PR base SHA from the event payload (a `--base-ref`
+  is ignored). The base commit must be in the clone (the workflow checks out
+  full history); if it is missing the measures are `unknown`.
+- **Pushes and local runs** (including the ReleaseReady Dev app) use
+  `--base-ref REF` (workflow input `base-ref`). Without one the measures are
+  `unknown: no comparison base`.
+- **Coverage** is never produced by the scan. Pass `--coverage PATH` (workflow
+  input `coverage-report`, repo-relative) with an Istanbul `coverage-final.json`
+  for the scanned commit. The report is unverified and is assumed to match the
+  scanned commit. Absent: `unknown: no coverage report supplied`. A
+  `json-summary` file has no per-line data and is `unknown`; a supplied path
+  that cannot be read exits 2.
+- **Duplication** uses the jscpd engine result. Changed source files jscpd
+  analyzes are counted even when clone-free, so no duplication is a known 0%.
+
+Results are in `report.json` (`newCode`), `summary.md` ("New-code measures") and
+`manifest.json` (`measures`). A measure with no changed executable lines is
+`unknown: zero denominator`.
+
+Unknown measures are reported and do not block while `onUnknown` is `"report"`
+(the default). To block on them, set `newCodeCoverage.onUnknown` and/or
+`newCodeDuplication.onUnknown` to `"fail"` in a gate file and pass it with
+`--gate PATH`, or change `gates/default.json`. The default flips to `"fail"`
+once the workflow reliably supplies a base and a coverage report.
+`--fail-on-severity` (the workflow input) still overrides only the new-issue
+threshold; the workflow default `high` equals the gate's.
 
 ## 4. Language detection
 
@@ -155,8 +181,8 @@ tflint), YAML (yamllint) and Markdown (markdownlint) count as covered; gitleaks,
 9. Swift: SwiftLint (needs a Swift runner).
 10. YAML and Markdown: yamllint and markdownlint. **Done.**
 11. Prettier check as an engine for TS/JS and the formats above.
-12. New-code coverage and duplication measures wired into the gate, then flip
-    `onUnknown` to `fail`.
+12. New-code coverage and duplication measures wired into the gate. **Done**
+    (`onUnknown` stays `report`; flipping it to `fail` is a separate decision).
 13. Type-aware ESLint for customers: opt-in input that supplies a reviewed
     tsconfig.
 14. Counsel review of every "customer: needs review" tool.

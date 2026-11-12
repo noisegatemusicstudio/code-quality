@@ -343,6 +343,7 @@ export function buildReport(input: {
   results: readonly EngineResult[];
   decision: Decision;
   languages?: readonly LanguageReport[];
+  newCode?: unknown;
 }): unknown {
   return {
     schemaVersion: 1,
@@ -350,6 +351,7 @@ export function buildReport(input: {
     commitSha: input.commitSha,
     decision: input.decision,
     languages: input.languages ?? [],
+    newCode: input.newCode ?? null,
     engines: input.results.map((r) => ({
       engine: r.engine,
       status: r.status,
@@ -361,6 +363,14 @@ export function buildReport(input: {
     })),
   };
 }
+
+/** Human text for an unknown measure's reason. */
+export const unknownText = (reason: string): string =>
+  reason === 'no-report'
+    ? 'no coverage report supplied'
+    : reason === 'no-base-ref'
+      ? 'no comparison base (not a pull request and no base ref given)'
+      : reason.replace(/-/g, ' ');
 
 /** Escape text for a Markdown table cell so engine output cannot inject markup. */
 export const mdEscape = (value: string): string =>
@@ -395,6 +405,18 @@ export function renderSummary(input: {
     pendingError?: string;
   };
   languages?: readonly LanguageReport[];
+  newCode?: {
+    baseSource: string;
+    baseSha: string | null;
+    measures: readonly {
+      id: string;
+      state: string;
+      percent?: number;
+      numerator?: number;
+      denominator?: number;
+      reason?: string;
+    }[];
+  };
 }): string {
   const { results, decision, baseline } = input;
   const lines: string[] = [
@@ -469,6 +491,24 @@ export function renderSummary(input: {
         (r) => `- **${r.engine}**: ${mdEscape(r.disclosure ?? '')}`,
       ),
     );
+  if (input.newCode) {
+    const nc = input.newCode;
+    lines.push(
+      '',
+      '### New-code measures',
+      '',
+      nc.baseSha
+        ? `Compared with \`${nc.baseSha.slice(0, 12)}\` (${nc.baseSource === 'pull-request-base' ? 'pull request base' : 'configured base ref'}).`
+        : 'No comparison base, so new code could not be determined.',
+      '',
+      '| Measure | Result | Lines |',
+      '| --- | --- | --- |',
+      ...nc.measures.map(
+        (m) =>
+          `| ${m.id} | ${m.state === 'known' ? `${(Math.round((m.percent ?? 0) * 100) / 100).toString()}%` : `unknown: ${mdEscape(unknownText(m.reason ?? ''))}`} | ${m.state === 'known' ? `${m.numerator}/${m.denominator}` : '–'} |`,
+      ),
+    );
+  }
   lines.push(
     '',
     '### Gate',

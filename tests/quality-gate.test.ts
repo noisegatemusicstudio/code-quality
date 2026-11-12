@@ -196,3 +196,63 @@ await test('coverage and duplication thresholds, and unknown measures', async ()
   assert.match(blocked.reasons.join(), /coverage not measured/);
   assert.match(blocked.reasons.join(), /duplication not measured/);
 });
+
+await test('new-code measures decide the gate: below 80% coverage and above 3% duplication fail', async () => {
+  const gate = await loadGate();
+  const measures = (coverage: number | null, duplication: number | null) => ({
+    newCodeCoveragePercent: coverage,
+    newCodeDuplicationPercent: duplication,
+  });
+  const pass = decideWithGate([], {
+    enforce: true,
+    gate,
+    measures: measures(80, 3),
+  });
+  assert.equal(pass.wouldFail, false);
+  const low = decideWithGate([], {
+    enforce: true,
+    gate,
+    measures: measures(79.9, 3),
+  });
+  assert.equal(low.exitCode, 1);
+  assert.match(
+    low.reasons.join(';'),
+    /new-code coverage 79.9%, required >= 80%/,
+  );
+  const dup = decideWithGate([], {
+    enforce: true,
+    gate,
+    measures: measures(90, 3.1),
+  });
+  assert.match(
+    dup.reasons.join(';'),
+    /new-code duplication 3.1%, required <= 3%/,
+  );
+});
+
+await test('unknown new-code measures are reported by default and block only when onUnknown is fail', async () => {
+  const gate = await loadGate();
+  const unknown = {
+    newCodeCoveragePercent: null,
+    newCodeDuplicationPercent: null,
+    newCodeCoverageUnknown: 'no coverage report supplied',
+  };
+  assert.equal(
+    decideWithGate([], { enforce: true, gate, measures: unknown }).wouldFail,
+    false,
+  );
+  const strict: QualityGate = {
+    ...gate,
+    newCodeCoverage: { ...gate.newCodeCoverage, onUnknown: 'fail' },
+  };
+  const blocked = decideWithGate([], {
+    enforce: true,
+    gate: strict,
+    measures: unknown,
+  });
+  assert.equal(blocked.exitCode, 1);
+  assert.match(
+    blocked.reasons.join(';'),
+    /coverage not measured \(no coverage report supplied\)/,
+  );
+});

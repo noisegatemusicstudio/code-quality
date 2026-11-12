@@ -1,3 +1,5 @@
+import { closeSync, fstatSync, openSync, readSync } from 'node:fs';
+import { join } from 'node:path';
 import type { ScannerAdapter } from './scanner-adapter.js';
 import {
   type Ratio,
@@ -26,6 +28,19 @@ export const jscpdPinnedConfig = Object.freeze({
   ignore: Object.freeze([] as string[]),
 });
 export const jscpdConfigVersion = 'jscpd-strict-5-50';
+
+/**
+ * Counting method recorded with every complete result. Duplicated lines come
+ * from the clone locations; the denominator is the report's own total line
+ * count, accepted only when it is consistent with the snapshot line counts of
+ * every file the clones name (clone-free files are not listed by jscpd, so the
+ * snapshot alone cannot give the full denominator).
+ */
+export const duplicationCounting = Object.freeze({
+  duplicatedLines: 'distinct-lines-from-clone-locations',
+  cloneFileLines: 'committed-snapshot-line-count',
+  denominator: 'report-total-lines-cross-checked-against-snapshot',
+});
 
 export const duplicationInputLimits = Object.freeze({
   bytes: 8388608,
@@ -85,6 +100,7 @@ export function jscpdAdapter(
       const detail = parseJscpdReport(report, {
         pathRoot: context.sourceRoot,
         files: undefined,
+        lineCount: snapshotLineCounter(context.sourceRoot),
       });
       return detail.state === 'complete'
         ? { findings: jscpdFindings(detail.clones) }
@@ -137,6 +153,12 @@ export type DuplicationState =
 export interface DuplicationContext {
   /** Absolute checkout root relativizing report paths ('/' for none). */
   pathRoot: string;
+  /**
+   * Line count of a repository path in the committed snapshot the scan used,
+   * or `undefined` when it cannot be counted. jscpd's report carries no
+   * per-file line counts, so every file it names in a clone is counted here.
+   */
+  lineCount?: (path: string) => number | undefined;
   /** Exact file set at the commit; `undefined` skips set matching. */
   files: readonly string[] | undefined;
   commitSha?: string;
@@ -152,10 +174,17 @@ export interface DuplicationDetail {
   commitSha: string | null;
   reportCommitSha: string | null;
   clones: Clone[];
-  /** Analyzed files with their line counts (the denominator, per file). */
+  /**
+   * Files named by clones with their snapshot line counts. jscpd lists no
+   * clone-free file, so this is a subset of the analyzed files.
+   */
   analyzed: Record<string, number>;
   /** Totals; `covered` is duplicated lines and `total` all analyzed lines. */
   totals: Ratio | null;
+  /** How the numbers were obtained, recorded in the measure's provenance. */
+  counting: typeof duplicationCounting | null;
+  /** Files jscpd analyzed (report-wide `statistics.total.sources`). */
+  sourceCount: number;
   cloneCount: number;
   excluded: string[];
   exclusionPatterns: string[];
@@ -183,6 +212,8 @@ export function parseJscpdReport(
     clones: [],
     analyzed: {},
     totals: null,
+    counting: null,
+    sourceCount: 0,
     cloneCount: 0,
     excluded: [],
     exclusionPatterns,
@@ -238,19 +269,28 @@ export function parseJscpdReport(
     }
     return path;
   };
-  let fileCount = 0;
+  // Real jscpd 5.4.3 reports give per-format counts, not per-file lines.
+  let formatLines = 0;
+  let formatSources = 0;
   for (const format of Object.values(root.statistics.formats)) {
-    if (!isRecord(format) || !isRecord(format.sources))
+    if (
+      !isRecord(format) ||
+      !isCount(format.lines) ||
+      !isCount(format.sources) ||
+      (formatSources += format.sources) > duplicationInputLimits.files
+    )
       return result('invalid');
-    for (const [key, stats] of Object.entries(format.sources)) {
-      if (++fileCount > duplicationInputLimits.files || !isRecord(stats))
-        return result('invalid');
-      if (!isCount(stats.lines)) return result('invalid');
-      const path = resolve(key);
-      if (path === null) return result('invalid');
-      if (path !== undefined) analyzed[path] = stats.lines;
-    }
+    formatLines += format.lines;
   }
+  const reported = root.statistics.total;
+  if (
+    !isCount(reported.lines) ||
+    !isCount(reported.sources) ||
+    !isCount(reported.clones) ||
+    reported.lines !== formatLines ||
+    reported.sources !== formatSources
+  )
+    return result('invalid');
   const clones: Clone[] = [];
   for (const item of root.duplicates as unknown[]) {
     if (!isRecord(item)) return result('invalid');
@@ -276,13 +316,17 @@ export function parseJscpdReport(
     if (
       !isCount(item.lines) ||
       !isCount(item.tokens) ||
-      typeof item.format !== 'string' ||
-      !(first.path in analyzed) ||
-      !(second.path in analyzed) ||
-      first.endLine > analyzed[first.path] ||
-      second.endLine > analyzed[second.path]
+      typeof item.format !== 'string'
     )
       return result('invalid');
+    for (const side of [first, second]) {
+      if (!(side.path in analyzed)) {
+        const length = ctx.lineCount?.(side.path);
+        if (length === undefined || !isCount(length)) return result('invalid');
+        analyzed[side.path] = length;
+      }
+      if (side.endLine > analyzed[side.path]) return result('invalid');
+    }
     clones.push({
       format: item.format,
       lines: item.lines,
@@ -295,21 +339,26 @@ export function parseJscpdReport(
     return result('unmatched', {
       unmatched: [...new Set(unmatched)].sort(compareText),
     });
+  // jscpd's totals are report-wide, so they cannot be scoped to a subset: a
+  // report touching excluded files has no usable denominator.
+  if (excluded.length > 0)
+    return result('unsupported', {
+      excluded: [...new Set(excluded)].sort(compareText),
+    });
+  // The report must agree with what the snapshot says about the files its
+  // clones name; those files can never outnumber or outsize the report.
+  const cloneFileLines = Object.values(analyzed).reduce((a, b) => a + b, 0);
+  if (
+    reported.clones !== clones.length ||
+    Object.keys(analyzed).length > reported.sources ||
+    cloneFileLines > reported.lines
+  )
+    return result('invalid');
+  const total = reported.lines;
   const dup = duplicatedLineSets(clones);
   let duplicated = 0;
   for (const set of Object.values(dup)) duplicated += set.size;
-  const total = Object.values(analyzed).reduce((a, b) => a + b, 0);
-  // The report's own totals must agree with the file-level numbers it lists.
-  const reported = root.statistics.total;
-  const full =
-    excluded.length === 0 && clones.length === root.duplicates.length;
-  if (
-    full &&
-    // jscpd's own `duplicatedLines` sums clone sizes (overlaps double count),
-    // so only the denominator and clone count are cross-checked.
-    (reported.lines !== total || reported.clones !== clones.length)
-  )
-    return result('invalid');
+  if (duplicated > total) return result('invalid');
   const notAnalyzed = inSet
     ? [...inSet]
         .filter((f) => !(f in analyzed) && !isExcluded(f))
@@ -319,8 +368,9 @@ export function parseJscpdReport(
     clones,
     analyzed,
     totals: { covered: duplicated, total },
+    counting: duplicationCounting,
+    sourceCount: reported.sources,
     cloneCount: clones.length,
-    excluded: [...new Set(excluded)].sort(compareText),
     notAnalyzed,
   });
 }
@@ -337,4 +387,34 @@ export function duplicatedLineSets(
         set.add(line);
     }
   return sets;
+}
+
+/**
+ * Line counter over an owned committed snapshot directory. Files are read
+ * bounded; anything unreadable, oversized or outside the root is `undefined`.
+ */
+export function snapshotLineCounter(
+  root: string,
+): (path: string) => number | undefined {
+  return (path) => {
+    if (path.startsWith('/') || path.split('/').includes('..'))
+      return undefined;
+    let fd: number | undefined;
+    try {
+      fd = openSync(join(root, path), 'r');
+      const stat = fstatSync(fd);
+      if (!stat.isFile() || stat.size > 1048576) return undefined;
+      const buffer = Buffer.alloc(stat.size);
+      if (readSync(fd, buffer, 0, stat.size, 0) !== stat.size) return undefined;
+      let lines = 0;
+      for (const byte of buffer) if (byte === 10) lines++;
+      return buffer.length > 0 && buffer[buffer.length - 1] !== 10
+        ? lines + 1
+        : lines;
+    } catch {
+      return undefined;
+    } finally {
+      if (fd !== undefined) closeSync(fd);
+    }
+  };
 }

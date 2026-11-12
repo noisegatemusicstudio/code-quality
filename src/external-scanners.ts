@@ -13,7 +13,11 @@ import { isAbsolute, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import type { AdapterFinding } from './adapter-envelope.js';
 import { parseGitleaksReport } from './gitleaks-adapter.js';
-import { jscpdFindings, parseJscpdReport } from './duplication.js';
+import {
+  jscpdFindings,
+  parseJscpdReport,
+  snapshotLineCounter,
+} from './duplication.js';
 import { runScannerProcess } from './scanner-process.js';
 import { externalPins } from './scanner-pins.js';
 
@@ -107,8 +111,9 @@ export function parseExternalReport(
     const detail = parseJscpdReport(text, {
       pathRoot: pathRoot ?? '/',
       files: undefined,
+      ...(pathRoot ? { lineCount: snapshotLineCounter(pathRoot) } : {}),
     });
-    const covered = Object.keys(detail.analyzed).length;
+    const covered = detail.sourceCount;
     if (detail.state !== 'complete' || covered === 0) return null;
     return {
       findingCount: detail.cloneCount,

@@ -211,6 +211,41 @@ Future work, out of scope here: authenticated, idempotent central upload;
 recorded redistribution and hosted-use approvals per engine; network-enforced
 isolation; baseline comparison of fingerprints across runs.
 
+### Semgrep CE adapter
+
+`runSemgrepScan` and `createSemgrepAdapter` (`/semgrep-adapter`) run Semgrep CE
+v1.185.0 over TypeScript/JavaScript files, within
+[docs/scanner-licensing.md](docs/scanner-licensing.md). The engine is a
+customer- or operator-installed binary at a trusted absolute path; it is never
+downloaded, bundled or redistributed, and the engine licence review (LGPL-2.1)
+still gates any packaging. CodeQL and Sonar analyzers are not used.
+
+- **Arguments** are fixed and callers pass none: `scan --json --metrics=off
+--disable-version-check --config <local rules path> .`. `--config` must be an
+  absolute local path; `auto`, `p/...`, `r/...`, URLs and relative paths are
+  refused (`skipped`/`customer-config-rejected`, `refusal: registry-config`)
+  and rules are never fetched at scan time. Semgrep runs no build or install
+  step; like `runAdapter` this is not a network-enforced sandbox.
+- **Rulesets**: `releaseready-authored` (starter rules in `rules/semgrep/`,
+  ruleset version `2026.11.1`, ReleaseReady licence header) is allowed for any
+  scope. `semgrep-maintained-snapshot` is internal-only (Semgrep Rules License
+  v1.0): it runs only from a pinned local snapshot and only when
+  `audience: 'internal'` is set; otherwise `refusal: internal-only-ruleset`.
+  Any other source is `unapproved-ruleset`. Nothing is ever substituted.
+- **Languages**: only `.ts/.tsx/.js/.jsx/.mjs/.cjs/.mts/.cts` are scanned. With
+  none, the scan is `skipped`/`no-supported-files`; other files are listed in
+  `unsupportedFiles`.
+- **Parser** (`parseSemgrepReport`): rule id, native severity, range and message
+  go in the envelope; `details` (by fingerprint) add CWE ids, confidence, kind
+  (`vulnerability` or `review-required-hotspot`: explicit rule `finding-type`,
+  else only HIGH/MEDIUM confidence counts as a vulnerability), dataflow
+  locations (no source text) and rule remediation text. Matched code and
+  `fix` are never copied. A non-empty `errors` array makes the run
+  `incomplete`/`engine-error`; unparseable output is `failed`/`invalid-output`.
+- Results cover the configured rules only. They are not Sonar-equivalent and are
+  not a complete security review. The starter rules are unproven against real
+  code and need tuning against the real engine before relying on them.
+
 ### OSV dependency-vulnerability adapter
 
 `runOsvScan` (`/osv-adapter`) runs the pinned OSV-Scanner (2.7.1, Apache-2.0)

@@ -1,0 +1,27 @@
+# Copyright (c) 2026 ReleaseReady. All rights reserved.
+# ReleaseReady-authored Semgrep rule (RRDSCRUM-133). Written from scratch; not
+# copied or derived from the Semgrep Registry or any other third-party rule set.
+# Ruleset version: 2026.11.1
+rules:
+  - id: releaseready.js.no-eval
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: Dynamic code evaluation with eval or the Function constructor can execute attacker-controlled code.
+    patterns:
+      - pattern-either:
+          - pattern: eval(...)
+          - pattern: new Function(...)
+          - pattern: Function(...)
+      - pattern-not: 'eval("...")'
+      - pattern-not: new Function("...")
+      - pattern-not: 'Function("...")'
+    metadata:
+      category: security
+      cwe: 'CWE-95: Improper Neutralization of Directives in Dynamically Evaluated Code'
+      confidence: HIGH
+      finding-type: vulnerability
+      remediation: 'Replace dynamic evaluation with a data-driven lookup or a parser; never evaluate input.'
+      author: ReleaseReady
+      license: 'Proprietary, all rights reserved (ReleaseReady-authored)'
+      version: '1'
+      ruleset-version: '2026.11.1'

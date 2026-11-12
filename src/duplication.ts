@@ -9,10 +9,14 @@ import {
   measuresSchemaVersion,
   toRepositoryPath,
 } from './measure-common.js';
-import { findingFingerprint } from './adapter-envelope.js';
+import { type AdapterFinding, findingFingerprint } from './adapter-envelope.js';
+import { externalPins } from './scanner-pins.js';
 
 /** jscpd 5.4.3 (MIT) is the approved duplication engine; see licensing doc. */
-export const jscpdPin = Object.freeze({ id: 'jscpd', version: '5.4.3' });
+export const jscpdPin = Object.freeze({
+  id: 'jscpd',
+  version: externalPins.jscpd.version,
+});
 /** Pinned detection configuration, recorded with every duplication result. */
 export const jscpdPinnedConfig = Object.freeze({
   mode: 'strict',
@@ -29,25 +33,37 @@ export const duplicationInputLimits = Object.freeze({
   files: 5000,
 });
 
+/** Report name and directory (relative to the workspace) jscpd writes to. */
+export const jscpdReportFile = 'out/jscpd-report.json';
 /**
  * Adapter definition for `runAdapter`. Arguments mirror the flags the repo's
  * committed-source scan already passes; callers may only add allowlisted
- * extras. The report is parsed from stdout. NOTE: jscpd's JSON reporter
- * normally writes a file, so a real invocation must route that report to
- * stdout (not verified here: no jscpd was downloaded or run); recorded reports
- * are parsed with {@link parseJscpdReport} instead.
+ * extras. jscpd's JSON reporter writes `jscpd-report.json` into `--output`, so
+ * the adapter declares that file (inside the private workspace, bounded) and
+ * `runAdapter` hands its content to `parse`. The executable is verified
+ * against the pinned SHA-256 unless a test passes its own.
  */
-export function jscpdAdapter(executable: string): ScannerAdapter {
+export function jscpdAdapter(
+  executable: string,
+  executableSha256: string = externalPins.jscpd.sha256,
+): ScannerAdapter {
   return {
     engine: { ...jscpdPin },
     rulesetVersion: jscpdConfigVersion,
     configVersion: jscpdConfigVersion,
     executable,
+    executableSha256,
+    outputFile: {
+      path: jscpdReportFile,
+      maxBytes: duplicationInputLimits.bytes,
+    },
     versionArgs: ['--version'],
     versionOutput: jscpdPin.version,
     fixedArgs: [
       '--reporters',
       'json',
+      '--output',
+      '../out',
       '--min-lines',
       String(jscpdPinnedConfig.minLines),
       '--min-tokens',
@@ -65,38 +81,43 @@ export function jscpdAdapter(executable: string): ScannerAdapter {
     ],
     allowedArgs: [],
     successExitCodes: [0, 42],
-    parse(stdout) {
-      const detail = parseJscpdReport(stdout, {
-        pathRoot: '/',
+    parse: (report, context) => {
+      const detail = parseJscpdReport(report, {
+        pathRoot: context.sourceRoot,
         files: undefined,
       });
-      if (detail.state !== 'complete') return undefined;
-      const findings = detail.clones.flatMap((c, i) =>
-        [
-          [c.first, c.second],
-          [c.second, c.first],
-        ].map(([a, b], side) => {
-          const base = {
-            ruleId: 'jscpd/duplicate',
-            nativeSeverity: 'info',
-            path: a.path,
-            range: {
-              startLine: a.startLine,
-              startColumn: 1,
-              endLine: a.endLine,
-              endColumn: 1,
-            },
-            message: `Duplicate of ${b.path}:${b.startLine}-${b.endLine}`,
-          };
-          return {
-            ...base,
-            fingerprint: findingFingerprint(jscpdPin.id, base, i * 2 + side),
-          };
-        }),
-      );
-      return { findings };
+      return detail.state === 'complete'
+        ? { findings: jscpdFindings(detail.clones) }
+        : undefined;
     },
   };
+}
+
+/** Envelope findings (two per clone, one per side) for parsed clones. */
+export function jscpdFindings(clones: readonly Clone[]): AdapterFinding[] {
+  return clones.flatMap((c, i) =>
+    [
+      [c.first, c.second],
+      [c.second, c.first],
+    ].map(([a, b], side) => {
+      const base = {
+        ruleId: 'jscpd/duplicate',
+        nativeSeverity: 'info',
+        path: a.path,
+        range: {
+          startLine: a.startLine,
+          startColumn: 1,
+          endLine: a.endLine,
+          endColumn: 1,
+        },
+        message: `Duplicate of ${b.path}:${b.startLine}-${b.endLine}`,
+      };
+      return {
+        ...base,
+        fingerprint: findingFingerprint(jscpdPin.id, base, i * 2 + side),
+      };
+    }),
+  );
 }
 
 export interface CloneSide {

@@ -20,26 +20,11 @@ import {
 } from './osv-record-validation.js';
 import { fileURLToPath } from 'node:url';
 import { runScannerProcess } from './scanner-process.js';
-import { immutableMetadata } from './scan-metadata.js';
+import type { AdapterFinding } from './adapter-envelope.js';
+import { parseOsvReport as parseSharedOsvReport } from './osv-adapter.js';
+import { osvPin } from './scanner-pins.js';
 
-export const osvPin = immutableMetadata({
-  version: '2.7.1',
-  license: 'Apache-2.0',
-  sha256: 'fb7dab19a8bd9bbe5c3189f09d4b7ee1820c9553a23bac202648a56efd2f6ee8',
-  coverage:
-    'npm package-lock only; source resolution, call analysis, queries, downloads and updates disabled; caller database completeness/freshness unverified',
-  databaseLimits: {
-    compressedBytes: 402653184,
-    expandedBytes: 2147483648,
-    entries: 500000,
-    workerV8OldSpaceMiB: 256,
-    bufferMemory:
-      'File-backed streamed cache and bounded records; V8 old-space is not a total RSS cap',
-    validationTimeoutMs: 120000,
-    officialFullArchiveCompatibility:
-      'unverified; large full-ecosystem archives may exceed supported bounds',
-  },
-});
+export { osvPin };
 export interface OsvDatabaseInput {
   archivePath: string;
   sha256: string;
@@ -63,6 +48,8 @@ export interface OsvExecutionResult {
   binarySha256: string;
   coverage: 'npm-package-lock-only';
   findingCount?: number;
+  /** Detailed envelope findings; only present when requested. */
+  findings?: AdapterFinding[];
   coveredFileCount?: number;
   packageCount?: number;
   unsupportedManifestCount?: number;
@@ -75,7 +62,16 @@ export interface OsvExecutionResult {
 }
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
-export function parseOsvReport(raw: Buffer, lockfiles: readonly string[]) {
+/**
+ * Strict legacy gate and counts (npm lockfiles only, every lockfile covered).
+ * Detailed findings come from the shared adapter parser, so the report format
+ * is interpreted in one place; `pathRoot` is the absolute scan root.
+ */
+export function parseOsvReport(
+  raw: Buffer,
+  lockfiles: readonly string[],
+  pathRoot?: string,
+) {
   if (raw.length > 1048576) return null;
   let value: unknown;
   try {
@@ -132,13 +128,37 @@ export function parseOsvReport(raw: Buffer, lockfiles: readonly string[]) {
     }
   }
   if (covered.size !== lockfiles.length) return null;
-  return { findingCount, packageCount, coveredFileCount: covered.size };
+  const findings: AdapterFinding[] = [];
+  const results = value.results as { source: { path: string } }[];
+  for (const lockfile of lockfiles) {
+    const rel =
+      pathRoot && lockfile.startsWith(`${pathRoot}/`)
+        ? lockfile.slice(pathRoot.length + 1)
+        : lockfile;
+    const shared = parseSharedOsvReport(
+      JSON.stringify({
+        results: results
+          .filter((r) => r.source.path === lockfile)
+          .map((r) => ({ ...r, source: { ...r.source, path: rel } })),
+      }),
+      rel,
+    );
+    if (!shared) return null;
+    findings.push(...shared.envelope);
+  }
+  return {
+    findingCount,
+    packageCount,
+    coveredFileCount: covered.size,
+    findings,
+  };
 }
 
 async function runOfflineOsvInner(
   sourceDirectory: string,
   executable?: string,
   database?: OsvDatabaseInput,
+  detailed = false,
 ): Promise<OsvExecutionResult> {
   const result: OsvExecutionResult = {
     id: 'osv',
@@ -367,15 +387,17 @@ async function runOfflineOsvInner(
       (execution.code !== 0 && execution.code !== 1)
     )
       return result;
-    const parsed = parseOsvReport(execution.stdout, lockfiles);
+    const parsed = parseOsvReport(execution.stdout, lockfiles, sourceDirectory);
     if (
       parsed === null ||
       (execution.code === 0) !== (parsed.findingCount === 0)
     )
       return result;
+    const { findings, ...counts } = parsed;
     return {
       ...result,
-      ...parsed,
+      ...counts,
+      ...(detailed ? { findings } : {}),
       state: 'limited',
       evidence: 'executed',
       reason: unsupportedManifestCount
@@ -400,9 +422,15 @@ export async function runOfflineOsv(
   sourceDirectory: string,
   executable?: string,
   database?: OsvDatabaseInput,
+  detailed = false,
 ): Promise<OsvExecutionResult> {
   try {
-    return await runOfflineOsvInner(sourceDirectory, executable, database);
+    return await runOfflineOsvInner(
+      sourceDirectory,
+      executable,
+      database,
+      detailed,
+    );
   } catch {
     return {
       id: 'osv',

@@ -26,6 +26,7 @@ import {
   type Snapshot,
 } from './committed-snapshot.js';
 import { runScannerProcess } from './scanner-process.js';
+import type { AdapterFinding } from './adapter-envelope.js';
 import {
   aggregateScanReport,
   scannerIds,
@@ -48,6 +49,8 @@ export interface ExecutionSlot {
   unresolvedDependencyCount?: number;
   sourceSuppressionCount?: number;
   findingCount?: number;
+  /** Detailed findings (gitleaks, jscpd, osv) when `detailedFindings` is set. */
+  findings?: AdapterFinding[];
   toolVersion?: string;
   config?: string;
   reason?:
@@ -136,6 +139,8 @@ export async function scanCommittedSource(options: {
   gitDirectory: string;
   commitSha: string;
   tools?: { gitleaks?: string; jscpd?: string; osv?: string };
+  /** Also attach detailed envelope findings to each external slot. */
+  detailedFindings?: boolean;
   osvDatabase?: OsvDatabaseInput;
   declarationBundle?: unknown;
   imports?: unknown;
@@ -295,6 +300,7 @@ export async function scanCommittedSource(options: {
           id,
           snapshot.directory,
           options.tools?.[id],
+          options.detailedFindings === true,
         );
         Object.assign(
           scanners.find((slot) => slot.id === id)!,
@@ -319,6 +325,7 @@ export async function scanCommittedSource(options: {
         snapshot.directory,
         options.tools?.osv,
         options.osvDatabase,
+        options.detailedFindings === true,
       );
       Object.assign(
         scanners.find((slot) => slot.id === 'osv')!,

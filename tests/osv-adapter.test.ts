@@ -5,6 +5,8 @@ Evidence: synthetic
 Scope: Parses recorded synthetic OSV-Scanner JSON and runs a fake executable through the adapter to prove dedup, disclosure and skipped/incomplete states; does not run the real binary or query the OSV API.
 */
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -120,6 +122,9 @@ process.exit(kind === 'vulnerable' ? 1 : 0);
 await chmod(exe, 0o755);
 const base: OsvAdapterOptions = {
   executable: exe,
+  executableSha256: createHash('sha256')
+    .update(await readFile(exe))
+    .digest('hex'),
   versionOutput: 'osv-scanner fake 2.7.1',
   now: new Date('2026-11-12T00:00:00Z'),
 };

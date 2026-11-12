@@ -1,3 +1,9 @@
+/*
+Test classification: integration
+Review status: Not Reviewed
+Evidence: synthetic
+Scope: Exercises external scanner report parsing and tool refusal with synthetic reports; real pinned binaries run only when already installed locally.
+*/
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { mkdtemp, mkdir, writeFile, rm, access } from 'node:fs/promises';
@@ -20,6 +26,7 @@ const installed = async (name: string) => {
 await test('external parsers remain count-only and reject malformed/contradictory reports', () => {
   assert.deepEqual(parseExternalReport('gitleaks', Buffer.from('[]')), {
     findingCount: 0,
+    findings: [],
   });
   assert.equal(
     parseExternalReport('gitleaks', Buffer.from('[{"Secret":"RAW_SECRET"}]')),

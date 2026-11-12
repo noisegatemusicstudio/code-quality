@@ -11,25 +11,13 @@ import {
 } from 'node:fs/promises';
 import { isAbsolute, join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
+import type { AdapterFinding } from './adapter-envelope.js';
+import { parseGitleaksReport } from './gitleaks-adapter.js';
+import { jscpdFindings, parseJscpdReport } from './duplication.js';
 import { runScannerProcess } from './scanner-process.js';
-import { immutableMetadata } from './scan-metadata.js';
+import { externalPins } from './scanner-pins.js';
 
-export const externalPins = immutableMetadata({
-  gitleaks: {
-    version: '8.30.1',
-    license: 'MIT',
-    sha256: '88f91962aa2f93ac6ab281d553b9e125f5197bbbce38f9f2437f7299c32e5509',
-    coverage:
-      'Current committed text tree, embedded default rules; no history/archive/decoded-content scan',
-  },
-  jscpd: {
-    version: '5.4.3',
-    license: 'MIT',
-    sha256: '8fb77187f871c40563389f69dc3c957c35756db69dcd5640ebe445b88d0f53be',
-    coverage:
-      'Native supported source formats, strict tokens, minimum 5 lines/50 tokens; not semantic duplication',
-  },
-});
+export { externalPins };
 export type ExternalId = keyof typeof externalPins;
 export interface ExternalResult {
   id: ExternalId;
@@ -43,6 +31,8 @@ export interface ExternalResult {
     | 'execution-or-report-failed'
     | 'cleanup-uncertain';
   findingCount?: number;
+  /** Detailed envelope findings; only present when requested. */
+  findings?: AdapterFinding[];
   coveredFileCount?: number;
   toolVersion: string;
   binarySha256: string;
@@ -80,75 +70,64 @@ export async function readBoundedRegular(
 }
 const record = (value: unknown): value is Record<string, unknown> =>
   typeof value === 'object' && value !== null && !Array.isArray(value);
-const count = (value: unknown): value is number =>
-  typeof value === 'number' && Number.isSafeInteger(value) && value >= 0;
 
-/** Pure count-only extraction; NEVER execution proof on its own. */
+/**
+ * Pure extraction on top of the shared adapter parsers (one parser per report
+ * format): counts for the legacy output plus the detailed envelope findings.
+ * NEVER execution proof on its own. `pathRoot` is the absolute scan root the
+ * engine reported paths under.
+ */
 export function parseExternalReport(
   id: ExternalId,
   raw: Buffer,
-): { findingCount: number; coveredFileCount?: number } | null {
+  pathRoot?: string,
+): {
+  findingCount: number;
+  coveredFileCount?: number;
+  findings: AdapterFinding[];
+} | null {
   if (raw.length > 1048576) return null;
-  let value: unknown;
+  let text: string;
   try {
-    value = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(raw));
+    text = new TextDecoder('utf-8', { fatal: true }).decode(raw);
   } catch {
     return null;
   }
-  if (id === 'gitleaks') {
-    if (!Array.isArray(value) || value.length > 10000) return null;
-    for (const item of value) {
-      if (
-        !record(item) ||
-        typeof item.RuleID !== 'string' ||
-        !item.RuleID ||
-        !count(item.StartLine) ||
-        !count(item.EndLine) ||
-        item.EndLine < item.StartLine ||
-        typeof item.Secret !== 'string' ||
-        item.Secret !== 'REDACTED'
-      )
+  try {
+    if (id === 'gitleaks') {
+      const parsed = parseGitleaksReport(text, false, pathRoot);
+      // Any skipped or truncated entry means the report is not trustworthy.
+      if (!parsed || parsed.partial || parsed.findings.length > 10000)
         return null;
+      return {
+        findingCount: parsed.findings.length,
+        findings: parsed.findings,
+      };
     }
-    return { findingCount: value.length };
+    const detail = parseJscpdReport(text, {
+      pathRoot: pathRoot ?? '/',
+      files: undefined,
+    });
+    const covered = Object.keys(detail.analyzed).length;
+    if (detail.state !== 'complete' || covered === 0) return null;
+    return {
+      findingCount: detail.cloneCount,
+      coveredFileCount: covered,
+      findings: jscpdFindings(detail.clones),
+    };
+  } catch {
+    return null;
   }
-  if (
-    !record(value) ||
-    !Array.isArray(value.duplicates) ||
-    value.duplicates.length > 10000 ||
-    !record(value.statistics) ||
-    !record(value.statistics.total)
-  )
-    return null;
-  const total = value.statistics.total;
-  for (const key of [
-    'clones',
-    'sources',
-    'lines',
-    'tokens',
-    'duplicatedLines',
-    'duplicatedTokens',
-  ])
-    if (!count(total[key])) return null;
-  if (
-    total.clones !== value.duplicates.length ||
-    !count(total.sources) ||
-    total.sources === 0
-  )
-    return null;
-  return {
-    findingCount: value.duplicates.length,
-    coveredFileCount: total.sources,
-  };
 }
 
 export function acceptExternalReport(
   id: ExternalId,
   exitCode: number,
   raw: Buffer,
+  pathRoot?: string,
 ) {
   if (exitCode !== 0 && exitCode !== 42) return null;
-  const parsed = parseExternalReport(id, raw);
+  const parsed = parseExternalReport(id, raw, pathRoot);
   return parsed !== null && (exitCode === 0) === (parsed.findingCount === 0)
     ? parsed
     : null;
@@ -162,6 +141,7 @@ async function runExternalScannerInner(
   id: ExternalId,
   sourceDirectory: string,
   executable?: string,
+  detailed = false,
 ): Promise<ExternalResult> {
   const pin = externalPins[id];
   const result: ExternalResult = {
@@ -332,6 +312,7 @@ async function runExternalScannerInner(
       id,
       execution.code,
       await readBoundedRegular(report, 1048576),
+      sourceDirectory,
     );
     if (parsed === null) return result;
     return {
@@ -339,7 +320,9 @@ async function runExternalScannerInner(
       state: 'completed',
       evidence: 'executed',
       reason: undefined,
-      ...parsed,
+      findingCount: parsed.findingCount,
+      coveredFileCount: parsed.coveredFileCount,
+      ...(detailed ? { findings: parsed.findings } : {}),
     };
   } catch {
     if (inFlight) uncertain = true;
@@ -357,9 +340,15 @@ export async function runExternalScanner(
   id: ExternalId,
   sourceDirectory: string,
   executable?: string,
+  detailed = false,
 ): Promise<ExternalResult> {
   try {
-    return await runExternalScannerInner(id, sourceDirectory, executable);
+    return await runExternalScannerInner(
+      id,
+      sourceDirectory,
+      executable,
+      detailed,
+    );
   } catch {
     const pin = externalPins[id];
     return {

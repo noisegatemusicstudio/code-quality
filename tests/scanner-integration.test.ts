@@ -1,3 +1,9 @@
+/*
+Test classification: integration
+Review status: Not Reviewed
+Evidence: synthetic
+Scope: Runs the committed-source scan against synthetic git fixtures and checks external report acceptance; does not run the real pinned Gitleaks, jscpd or OSV-Scanner binaries.
+*/
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -99,7 +105,13 @@ async function fixture() {
 await test('exit/report consistency rejects impossible native completion claims', () => {
   const findings = Buffer.from(
     JSON.stringify([
-      { RuleID: 'synthetic', StartLine: 1, EndLine: 1, Secret: 'REDACTED' },
+      {
+        RuleID: 'synthetic',
+        StartLine: 1,
+        EndLine: 1,
+        File: 'a.txt',
+        Secret: 'REDACTED',
+      },
     ]),
   );
   assert.equal(acceptExternalReport('gitleaks', 0, findings), null);
@@ -108,8 +120,29 @@ await test('exit/report consistency rejects impossible native completion claims'
   assert.equal(acceptExternalReport('gitleaks', 0, Buffer.from('[')), null);
   const clones = Buffer.from(
     JSON.stringify({
-      duplicates: [{}],
+      duplicates: [
+        {
+          format: 'typescript',
+          lines: 10,
+          tokens: 80,
+          firstFile: {
+            name: 'src/a.ts',
+            startLoc: { line: 1 },
+            endLoc: { line: 10 },
+          },
+          secondFile: {
+            name: 'src/b.ts',
+            startLoc: { line: 1 },
+            endLoc: { line: 10 },
+          },
+        },
+      ],
       statistics: {
+        formats: {
+          typescript: {
+            sources: { 'src/a.ts': { lines: 30 }, 'src/b.ts': { lines: 30 } },
+          },
+        },
         total: {
           clones: 1,
           sources: 2,
@@ -122,10 +155,11 @@ await test('exit/report consistency rejects impossible native completion claims'
     }),
   );
   assert.equal(acceptExternalReport('jscpd', 0, clones), null);
-  assert.deepEqual(acceptExternalReport('jscpd', 42, clones), {
-    findingCount: 1,
-    coveredFileCount: 2,
-  });
+  const accepted = acceptExternalReport('jscpd', 42, clones);
+  assert.equal(accepted?.findingCount, 1);
+  assert.equal(accepted?.coveredFileCount, 2);
+  // Detailed findings come from the shared parser: one per clone side.
+  assert.equal(accepted?.findings.length, 2);
   const contradictory = Buffer.from(
     clones.toString().replace('"clones":1', '"clones":0'),
   );

@@ -5,6 +5,7 @@ Evidence: synthetic
 Scope: Parses recorded synthetic Gitleaks JSON and runs a fake executable through the adapter to prove redaction, exceptions and failure states; does not run the real gitleaks binary.
 */
 import assert from 'node:assert/strict';
+import { createHash } from 'node:crypto';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -78,6 +79,7 @@ await writeFile(executable, fakeSource);
 await chmod(executable, 0o755);
 const base = {
   executable,
+  executableSha256: createHash('sha256').update(fakeSource).digest('hex'),
   configPath: join(dir, 'reviewed.toml'),
   ignorePath: join(dir, 'ignore'),
 };

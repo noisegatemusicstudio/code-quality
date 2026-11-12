@@ -35,8 +35,15 @@ await test('classifies supported, unsupported, excluded and customer config file
     'eslint.config.js',
     '.eslintrc.json',
   ]);
-  assert.deepEqual(c.supported, ['a.ts', 'b.mjs', 'c.cjs', 'd.js']);
-  assert.deepEqual(c.unsupported, ['e.py', 'f.jsx', 'g.tsx']);
+  assert.deepEqual(c.supported, [
+    'a.ts',
+    'b.mjs',
+    'c.cjs',
+    'd.js',
+    'f.jsx',
+    'g.tsx',
+  ]);
+  assert.deepEqual(c.unsupported, ['e.py']);
   assert.equal(c.excluded.length, 3);
   assert.deepEqual(c.customerConfig, ['.eslintrc.json', 'eslint.config.js']);
 });
@@ -109,12 +116,39 @@ await test(
   'unsupported files are reported distinctly and do not hide supported ones',
   { skip: !linux },
   async () => {
-    const r = await run({ 'ok.ts': benign, 'app.py': 'x=1', 'ui.jsx': '<a/>' });
+    const r = await run({
+      'ok.ts': benign,
+      'app.py': 'x=1',
+      'ui.vue': '<template/>',
+    });
     assert.equal(r.envelope.status, 'completed');
-    assert.deepEqual(r.report.unsupportedFiles, ['app.py', 'ui.jsx']);
+    assert.deepEqual(r.report.unsupportedFiles, ['app.py', 'ui.vue']);
     const none = await run({ 'app.py': 'x=1' });
     assert.equal(none.envelope.status, 'skipped');
     assert.equal(none.envelope.reason, 'no-supported-files');
+  },
+);
+
+await test(
+  'JSX in .js/.jsx/.mjs/.cjs and TSX parse with the bundled parser; broken files are still named',
+  { skip: !linux },
+  async () => {
+    const r = await run({
+      'a.js': 'export const A = () => <div className="a">{1}</div>;\n',
+      'b.jsx': 'export const B = () => <><span /></>;\n',
+      'c.mjs': 'export const C = () => <i />;\n',
+      'd.cjs': 'module.exports = () => <b />;\n',
+      'e.tsx': 'export const E = <T,>(p: { v: T }) => <p>{String(p.v)}</p>;\n',
+      'f.ts': 'const g = <T,>(x: T): T => x;\nexport { g };\n',
+      'ok.ts': benign,
+    });
+    assert.deepEqual(r.report.parseFailures, []);
+    assert.equal(r.envelope.status, 'completed');
+    assert.equal(r.report.lintedFiles, 7);
+    const broken = await run({ 'x.tsx': 'const = <div', 'ok.ts': benign });
+    assert.equal(broken.envelope.status, 'incomplete');
+    assert.equal(broken.envelope.reason, 'parse-failure');
+    assert.deepEqual(broken.report.parseFailures, ['x.tsx']);
   },
 );
 

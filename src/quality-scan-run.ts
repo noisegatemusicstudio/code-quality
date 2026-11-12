@@ -44,7 +44,11 @@ import {
   runSemgrepScan,
   semgrepVersion,
 } from './semgrep-adapter.js';
-import { runTrivyScan, trivyAdapterEngine } from './trivy-adapter.js';
+import {
+  isIacCandidate,
+  runTrivyScan,
+  trivyAdapterEngine,
+} from './trivy-adapter.js';
 
 const exec = promisify(execFile);
 const projectEslintConfig =
@@ -150,7 +154,16 @@ export interface BoundedFiles {
   files: Record<string, string>;
   /** Matching files that could not be passed to the engine, with no content kept. */
   omitted: number;
+  /** Why files were omitted, by cause (counts only; no paths or content). */
+  causes: Partial<Record<OmissionCause, number>>;
 }
+export type OmissionCause =
+  | 'file-count-limit'
+  | 'file-too-large'
+  | 'total-size-limit'
+  | 'not-regular-file'
+  | 'not-utf8'
+  | 'unreadable';
 /**
  * Read matching tracked files within the adapter's input limits. Symlinks,
  * non-UTF-8 files and anything over a limit are counted in `omitted`, so the
@@ -162,29 +175,51 @@ export async function readBoundedFiles(
   match: (path: string) => boolean,
 ): Promise<BoundedFiles> {
   const files: Record<string, string> = {};
+  const causes: BoundedFiles['causes'] = {};
   let omitted = 0;
   let total = 0;
+  const omit = (cause: OmissionCause): void => {
+    omitted += 1;
+    causes[cause] = (causes[cause] ?? 0) + 1;
+  };
+  let kept = 0;
   for (const path of paths.filter(match)) {
-    if (Object.keys(files).length >= adapterLimits.files) {
-      omitted += 1;
+    if (kept >= adapterLimits.files) {
+      omit('file-count-limit');
       continue;
     }
     try {
       const full = join(repo, path);
       const info = await lstat(full);
-      if (!info.isFile() || info.size > adapterLimits.fileBytes)
-        throw new Error();
-      if (total + info.size > adapterLimits.totalBytes) throw new Error();
-      const text = new TextDecoder('utf-8', { fatal: true }).decode(
-        await readFileNoFollow(full),
-      );
+      if (!info.isFile()) {
+        omit('not-regular-file');
+        continue;
+      }
+      if (info.size > adapterLimits.fileBytes) {
+        omit('file-too-large');
+        continue;
+      }
+      if (total + info.size > adapterLimits.totalBytes) {
+        omit('total-size-limit');
+        continue;
+      }
+      let text: string;
+      try {
+        text = new TextDecoder('utf-8', { fatal: true }).decode(
+          await readFileNoFollow(full),
+        );
+      } catch (error) {
+        omit(error instanceof TypeError ? 'not-utf8' : 'unreadable');
+        continue;
+      }
       total += info.size;
       files[path] = text;
+      kept += 1;
     } catch {
-      omitted += 1;
+      omit('unreadable');
     }
   }
-  return { files, omitted };
+  return { files, omitted, causes };
 }
 
 const idSafe = (value: string, fallback: string): string => {
@@ -249,16 +284,36 @@ export async function trivyVersionOutput(executable: string): Promise<string> {
   return output;
 }
 
+/** Name the files ESLint could not parse so an incomplete result is actionable. */
+export function withParseFailures(
+  result: EngineResult,
+  report: { parseFailures: readonly string[]; truncated: boolean },
+): EngineResult {
+  if (report.parseFailures.length === 0 || result.status === 'failed')
+    return result;
+  const shown = report.parseFailures.slice(0, 20).join(', ');
+  const more =
+    report.parseFailures.length > 20 || report.truncated ? ', and more' : '';
+  return {
+    ...result,
+    reason: `parse-failure: ${report.parseFailures.length} file(s) the bundled parser cannot parse and were not linted: ${shown}${more}`,
+  };
+}
+
 /** Map a bounded-input shortfall onto an engine result, never to a clean one. */
 export function applyOmitted(
   result: EngineResult,
   omitted: number,
+  causes: BoundedFiles['causes'] = {},
 ): EngineResult {
   if (omitted === 0 || result.status !== 'completed') return result;
+  const detail = Object.entries(causes)
+    .map(([cause, count]) => `${cause}: ${count}`)
+    .join(', ');
   return {
     ...result,
     status: 'incomplete',
-    reason: `${omitted} file(s) exceeded adapter input limits, were unreadable or not UTF-8 and were not scanned`,
+    reason: `${omitted} file(s) exceeded adapter input limits, were unreadable or not UTF-8 and were not scanned${detail ? ` (${detail})` : ''}`,
   };
 }
 
@@ -440,14 +495,22 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
   await guard('eslint', async () => {
     // The adapter refuses project ESLint configs; leave them out so the bundled
     // ReleaseReady rules run instead (the project's own rules are not applied).
-    const { files, omitted } = await readBoundedFiles(
+    const { files, omitted, causes } = await readBoundedFiles(
       options.repo,
       paths,
       (p) =>
-        /\.(?:[cm]?[jt]s)$/.test(p) && !projectEslintConfig.test(baseName(p)),
+        /\.(?:[cm]?[jt]s|[jt]sx)$/.test(p) &&
+        !projectEslintConfig.test(baseName(p)),
     );
-    const { envelope } = await runEslintScan({ scope: options.scope, files });
-    return applyOmitted(fromEnvelope('eslint', envelope, 'bundled'), omitted);
+    const { envelope, report } = await runEslintScan({
+      scope: options.scope,
+      files,
+    });
+    return applyOmitted(
+      withParseFailures(fromEnvelope('eslint', envelope, 'bundled'), report),
+      omitted,
+      causes,
+    );
   });
 
   await guard('semgrep', async () => {
@@ -457,7 +520,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
         'semgrep',
         options.installErrors.semgrep ?? 'semgrep is not installed',
       );
-    const { files, omitted } = await readBoundedFiles(
+    const { files, omitted, causes } = await readBoundedFiles(
       options.repo,
       paths,
       (p) => /\.(?:[cm]?[jt]s|[jt]sx)$/.test(p),
@@ -478,6 +541,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     return applyOmitted(
       result.refusal ? { ...base, reason: result.refusal } : base,
       omitted,
+      causes,
     );
   });
 
@@ -488,13 +552,10 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
         'trivy',
         options.installErrors.trivy ?? 'trivy missing or sha256 mismatch',
       );
-    const { files, omitted } = await readBoundedFiles(
+    const { files, omitted, causes } = await readBoundedFiles(
       options.repo,
       paths,
-      (p) =>
-        /(?:\.(?:tf|tfvars|tf\.json|ya?ml|json|toml)|(?:^|\/)(?:Dockerfile|Containerfile)(?:\.[A-Za-z0-9_-]+)?)$/.test(
-          p,
-        ),
+      isIacCandidate,
     );
     const result = await runTrivyScan(
       {
@@ -507,6 +568,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     return applyOmitted(
       fromEnvelope('trivy', result.envelope, trivyPin.version),
       omitted,
+      causes,
     );
   });
 
@@ -606,7 +668,18 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
             failed(id, options.installErrors[id] ?? 'engine not installed'),
           );
         else if (!slot) out.set(id, failed(id, 'no result from scan'));
-        else out.set(id, fromSlot(id, slot, report.sourceError, options.scope));
+        else
+          out.set(
+            id,
+            fromSlot(
+              id,
+              slot,
+              report.sourceError && report.sourceDetail
+                ? `${report.sourceError} (${report.sourceDetail})`
+                : report.sourceError,
+              options.scope,
+            ),
+          );
       }
     } catch {
       for (const id of snapshotEngines)

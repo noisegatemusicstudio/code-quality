@@ -43,6 +43,12 @@ async function main() {
         { files: ['**/*.{js,cjs,mjs,jsx,ts,cts,mts,tsx}'] },
         js.configs.recommended,
         ...tseslint.configs.recommended,
+        {
+          files: ['**/*.{js,cjs,mjs,jsx}'],
+          languageOptions: {
+            parserOptions: { ecmaFeatures: { jsx: true } },
+          },
+        },
       ],
     });
     for (const file of files) {

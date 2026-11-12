@@ -25,7 +25,9 @@ import {
   installEngine,
   readBoundedFiles,
   scopeFromEnvironment,
+  withParseFailures,
 } from '../src/quality-scan-run.js';
+import { isIacCandidate } from '../src/trivy-adapter.js';
 import {
   externalPins,
   osvPin,
@@ -116,6 +118,12 @@ await test('bounded reading omits symlinks, non-UTF-8 files and files past the l
     );
     assert.deepEqual(Object.keys(read.files), ['src/a.ts']);
     assert.equal(read.omitted, 4);
+    assert.deepEqual(read.causes, {
+      'not-utf8': 1,
+      'file-too-large': 1,
+      'not-regular-file': 1,
+      unreadable: 1,
+    });
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
@@ -251,4 +259,73 @@ await test('dogfood workflow calls the reusable one in advisory mode on every pu
   assert.match(text, /enforce: false/);
   assert.match(text, /code-quality-ref: \$\{\{ github\.sha \}\}/);
   assert.match(text, /^permissions:\n {2}contents: read\n/m);
+});
+
+await test('trivy candidate selection keeps IaC and drops lockfiles, manifests and vendored data', () => {
+  for (const keep of [
+    'main.tf',
+    'infra/vars.tfvars',
+    'k8s/deploy.yaml',
+    'cfn/template.json',
+    'Dockerfile',
+    'docker/Dockerfile.prod',
+    'compose.yml',
+  ])
+    assert.equal(isIacCandidate(keep), true, keep);
+  for (const drop of [
+    'package.json',
+    'web/package-lock.json',
+    'pnpm-lock.yaml',
+    'tsconfig.build.json',
+    'apps/a/jsconfig.json',
+    '.eslintrc.json',
+    'dist/bundle.json',
+    'node_modules/x/k8s.yaml',
+    'trivy.yaml',
+    'README.md',
+    'src/App.tsx',
+  ])
+    assert.equal(isIacCandidate(drop), false, drop);
+});
+
+await test('omission causes are named in the incomplete reason without paths', () => {
+  const done: EngineResult = {
+    engine: 'trivy',
+    status: 'completed',
+    findings: [],
+  };
+  const partial = applyOmitted(done, 3, {
+    'file-count-limit': 2,
+    'not-utf8': 1,
+  });
+  assert.equal(partial.status, 'incomplete');
+  assert.match(partial.reason ?? '', /file-count-limit: 2, not-utf8: 1/);
+});
+
+await test('eslint parse failures are listed by name and cap the list', () => {
+  const base: EngineResult = {
+    engine: 'eslint',
+    status: 'incomplete',
+    reason: 'parse-failure',
+    findings: [],
+  };
+  const named = withParseFailures(base, {
+    parseFailures: ['a.vue.js', 'b.ts'],
+    truncated: false,
+  });
+  assert.match(
+    named.reason ?? '',
+    /parse-failure: 2 file\(s\).*a\.vue\.js, b\.ts/,
+  );
+  const names = Array.from({ length: 30 }, (_, i) => `f${i}.js`);
+  const capped = withParseFailures(base, {
+    parseFailures: names,
+    truncated: true,
+  });
+  assert.match(capped.reason ?? '', /f19\.js, and more/);
+  assert.ok(!(capped.reason ?? '').includes('f20.js'));
+  assert.equal(
+    withParseFailures(base, { parseFailures: [], truncated: false }),
+    base,
+  );
 });

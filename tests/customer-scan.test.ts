@@ -1,3 +1,8 @@
+// Test classification: integration
+// Review status: Not Reviewed
+// Evidence: synthetic
+// Scope: committed-snapshot scanning against synthetic local Git fixtures with real Git, ESLint and TypeScript; not a hosted-service path.
+import { requireSupportedGit } from './git-requirement.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync } from 'node:child_process';
@@ -19,7 +24,7 @@ import { runScannerProcess } from '../src/scanner-process.js';
 async function fixture() {
   const root = await mkdtemp(join(tmpdir(), 'scanner-fixture-'));
   const git = (...args: string[]) =>
-    execFileSync('/usr/bin/git', args, {
+    execFileSync(requireSupportedGit(), args, {
       cwd: root,
       encoding: 'utf8',
       env: {
@@ -51,7 +56,7 @@ async function fixture() {
     '--no-verify',
   );
   const options = {
-    gitExecutable: '/usr/bin/git',
+    gitExecutable: requireSupportedGit(),
     gitDirectory: join(root, '.git'),
     commitSha: git('rev-parse', 'HEAD'),
   };

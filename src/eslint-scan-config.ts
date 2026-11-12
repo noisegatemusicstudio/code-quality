@@ -18,9 +18,11 @@ export const scanFiles = [
   '**/*.js',
   '**/*.mjs',
   '**/*.cjs',
+  '**/*.jsx',
   '**/*.ts',
   '**/*.mts',
   '**/*.cts',
+  '**/*.tsx',
 ];
 export const scanIgnores = [
   '**/node_modules/**',
@@ -40,17 +42,29 @@ export default defineConfig(
       noInlineConfig: true,
       reportUnusedDisableDirectives: 'off',
     },
-    languageOptions: { ecmaVersion: 'latest' },
+    // JSX is parsed in every JavaScript-family file: React projects commonly
+    // keep JSX in `.js`. TypeScript files infer JSX from the `.tsx` extension.
+    languageOptions: {
+      ecmaVersion: 'latest',
+      parserOptions: { ecmaFeatures: { jsx: true } },
+    },
     // No browser/Node globals are configured, so undefined-name checks would
     // only produce noise; they are off rather than guessed.
     rules: { 'no-undef': 'off' },
   },
   {
-    files: ['**/*.ts', '**/*.mts', '**/*.cts'],
+    files: ['**/*.ts', '**/*.mts', '**/*.cts', '**/*.tsx'],
     extends: [tseslint.configs.strict, tseslint.configs.stylistic],
   },
   {
-    files: ['**/*.js', '**/*.mjs', '**/*.ts', '**/*.mts'],
+    files: [
+      '**/*.js',
+      '**/*.mjs',
+      '**/*.jsx',
+      '**/*.ts',
+      '**/*.mts',
+      '**/*.tsx',
+    ],
     languageOptions: { sourceType: 'module' },
   },
   {

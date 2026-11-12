@@ -119,6 +119,25 @@ const digestRef = /^[a-z0-9][a-z0-9._/:-]{0,180}@sha256:[a-f0-9]{64}$/;
 const tarball = /\.(?:tar|tar\.gz|tgz)$/;
 const iacFile =
   /(?:\.(?:tf|tfvars|tf\.json|ya?ml|json|toml)|(?:^|\/)(?:Dockerfile|Containerfile)(?:\.[A-Za-z0-9_-]+)?)$/;
+/**
+ * Tracked JSON/YAML/TOML that is never infrastructure-as-code: dependency
+ * lockfiles and manifests, compiler/tooling configs, and files under vendored
+ * or generated directories. `trivy config` has no checks for them, so passing
+ * them only spends the bounded input budget and can push real IaC out of it.
+ */
+const nonIacFile =
+  /(?:^|\/)(?:(?:package|package-lock|npm-shrinkwrap|composer|bower|deno)\.json|pnpm-lock\.ya?ml|(?:ts|js)config(?:\.[A-Za-z0-9_-]+)?\.json|\.(?:eslintrc|prettierrc|babelrc|swcrc)(?:\.(?:json|ya?ml))?|renovate\.json5?|Cargo\.toml|pyproject\.toml)$/;
+const nonIacDirectory =
+  /(?:^|\/)(?:node_modules|dist|build|coverage|vendor|\.yarn|\.pnpm-store)\//;
+/** Tracked paths worth handing to `trivy config`. Pure, so it is testable. */
+export function isIacCandidate(path: string): boolean {
+  return (
+    iacFile.test(path) &&
+    !nonIacFile.test(path) &&
+    !nonIacDirectory.test(path) &&
+    !trivyControlFiles.has(baseName(path))
+  );
+}
 /** Files Trivy reads implicitly from its working directory: never workspace input. */
 const trivyControlFiles = new Set([
   'trivy.yaml',

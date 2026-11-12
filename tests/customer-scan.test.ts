@@ -17,7 +17,11 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createCommittedSnapshot } from '../src/committed-snapshot.js';
+import {
+  createCommittedSnapshot,
+  SnapshotError,
+  snapshotBounds,
+} from '../src/committed-snapshot.js';
 import { scanCommittedSource } from '../src/customer-scan.js';
 import { runScannerProcess } from '../src/scanner-process.js';
 
@@ -217,11 +221,19 @@ await test('snapshot rejects commit and blob bytes that do not match Git object 
   }
 });
 
-await test('symlink tree entries and external object alternates fail closed', async () => {
+await test('symlink, submodule, non-ASCII and oversized entries are counted as omitted, never clean', async () => {
   const f = await fixture();
   try {
     await symlink('/outside-secret', join(f.root, 'link'));
-    f.git('add', 'link');
+    await writeFile(join(f.root, 'big.bin'), 'x'.repeat(1048577));
+    await writeFile(join(f.root, 'caf\u00e9.ts'), 'export const a = 1;\n');
+    f.git('add', '.');
+    f.git(
+      'update-index',
+      '--add',
+      '--cacheinfo',
+      `160000,${'1'.repeat(40)},vendor-sub`,
+    );
     f.git(
       '-c',
       'user.name=Fixture',
@@ -229,20 +241,98 @@ await test('symlink tree entries and external object alternates fail closed', as
       'user.email=fixture@example.invalid',
       'commit',
       '-qm',
-      'link',
+      'unsupported entries',
       '--no-verify',
     );
-    await assert.rejects(
-      createCommittedSnapshot({
-        ...f.options,
-        commitSha: f.git('rev-parse', 'HEAD'),
-      }),
+    const snapshot = await createCommittedSnapshot({
+      ...f.options,
+      commitSha: f.git('rev-parse', 'HEAD'),
+    });
+    try {
+      assert.deepEqual(snapshot.omitted, {
+        symlink: 1,
+        submodule: 1,
+        'oversized-blob': 1,
+        'unsupported-path': 1,
+      });
+      assert.equal(snapshot.fileCount, 3);
+      await assert.rejects(access(join(snapshot.directory, 'link')));
+      await assert.rejects(access(join(snapshot.directory, 'big.bin')));
+    } finally {
+      await snapshot.dispose();
+    }
+    // The omissions are bound into the manifest hash and no slot may stay completed.
+    const report = await scanCommittedSource({
+      ...f.options,
+      commitSha: f.git('rev-parse', 'HEAD'),
+    });
+    assert.equal(report.source?.omitted.symlink, 1);
+    assert.ok(report.scanners.every((slot) => slot.state !== 'completed'));
+  } finally {
+    await f.dispose();
+  }
+});
+
+await test('trees beyond the old 1000-entry bound snapshot, with a named hard cap', async () => {
+  const f = await fixture();
+  try {
+    for (let index = 0; index < 1100; index++)
+      await writeFile(join(f.root, `f${index}.txt`), `${index}\n`);
+    f.git('add', '.');
+    f.git(
+      '-c',
+      'user.name=Fixture',
+      '-c',
+      'user.email=fixture@example.invalid',
+      'commit',
+      '-qm',
+      'many files',
+      '--no-verify',
     );
+    const snapshot = await createCommittedSnapshot({
+      ...f.options,
+      commitSha: f.git('rev-parse', 'HEAD'),
+    });
+    try {
+      assert.equal(snapshot.fileCount, 1103);
+      assert.deepEqual(snapshot.omitted, {
+        symlink: 0,
+        submodule: 0,
+        'oversized-blob': 0,
+        'unsupported-path': 0,
+      });
+    } finally {
+      await snapshot.dispose();
+    }
+    assert.ok(snapshotBounds.sourceFiles >= 1100);
+    assert.ok(Number.isSafeInteger(snapshotBounds.sourceFiles));
+  } finally {
+    await f.dispose();
+  }
+});
+
+await test('shallow history and external object alternates fail closed with a named reason', async () => {
+  const f = await fixture();
+  try {
+    await writeFile(join(f.root, '.git/shallow'), `${f.options.commitSha}\n`);
+    await assert.rejects(
+      createCommittedSnapshot(f.options),
+      (error: unknown) =>
+        error instanceof SnapshotError && error.detail === 'shallow-history',
+    );
+    await rm(join(f.root, '.git/shallow'));
     await writeFile(
       join(f.root, '.git/objects/info/alternates'),
       '/outside-object-store\n',
     );
-    await assert.rejects(createCommittedSnapshot(f.options));
+    await assert.rejects(
+      createCommittedSnapshot(f.options),
+      (error: unknown) =>
+        error instanceof SnapshotError && error.detail === 'alternates',
+    );
+    const report = await scanCommittedSource(f.options);
+    assert.equal(report.sourceError, 'source-unavailable');
+    assert.equal(report.sourceDetail, 'alternates');
   } finally {
     await f.dispose();
   }

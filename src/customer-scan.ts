@@ -22,6 +22,9 @@ import {
 import { OSV_SCHEMA_METADATA } from './osv-database.js';
 import {
   createCommittedSnapshot,
+  omittedTotal,
+  snapshotBounds,
+  type SnapshotOmissions,
   SnapshotError,
   type Snapshot,
 } from './committed-snapshot.js';
@@ -58,6 +61,7 @@ export interface ExecutionSlot {
     | OsvExecutionResult['reason']
     | 'invalid-declaration-bundle'
     | 'unverified-input'
+    | 'snapshot-entries-omitted'
     | 'invalid-import';
   binarySha256?: string;
   database?: OsvExecutionResult['database'];
@@ -72,6 +76,8 @@ export interface ExecutionReport {
     manifestSha256: string;
     fileCount: number;
     byteCount: number;
+    /** Tree entries never materialised (symlinks, submodules, oversized, non-ASCII). */
+    omitted: SnapshotOmissions;
     checkoutIncluded: false;
     dependencyInputs: 'none' | 'declaration-bundle';
     declarationBundle?: {
@@ -82,6 +88,8 @@ export interface ExecutionReport {
   } | null;
   status: 'incomplete';
   sourceError?: 'source-unavailable' | 'cleanup-failed' | 'cleanup-uncertain';
+  /** Fixed token naming the guard that made the snapshot unavailable. */
+  sourceDetail?: string;
   cleanup: 'not-needed' | 'completed' | 'uncertain-retained' | 'failed';
   projectTypeCheck: 'not-performed' | 'fixed-profile-only';
   runtime: { nodeVersion: string; gitVersion?: string };
@@ -100,14 +108,7 @@ export const executionManifest = immutableMetadata({
   source:
     'Committed tree only; checkout modifications and untracked files excluded',
   snapshotBounds: {
-    objectStoreBytes: 67108864,
-    sourceBytes: 16777216,
-    sourceFiles: 1000,
-    sourceFileBytes: 1048576,
-    deadlineMs: 30000,
-    gitAddressSpaceBytes: 1073741824,
-    gitDataBytes: 536870912,
-    gitCpuSeconds: 30,
+    ...snapshotBounds,
     historyRead:
       'Entire bounded object store copied and fsck validates ancestry; unsupported shallow/alternate/worktree object stores rejected',
   },
@@ -175,6 +176,8 @@ export async function scanCommittedSource(options: {
   } catch (error) {
     report.sourceError =
       error instanceof SnapshotError ? error.code : 'source-unavailable';
+    if (error instanceof SnapshotError && error.detail)
+      report.sourceDetail = error.detail;
     if (report.sourceError === 'cleanup-uncertain')
       report.cleanup = 'uncertain-retained';
     else if (report.sourceError === 'cleanup-failed') report.cleanup = 'failed';
@@ -185,6 +188,7 @@ export async function scanCommittedSource(options: {
     manifestSha256: snapshot.manifestSha256,
     fileCount: snapshot.fileCount,
     byteCount: snapshot.byteCount,
+    omitted: snapshot.omitted,
     checkoutIncluded: false,
     dependencyInputs: 'none',
   };
@@ -334,6 +338,14 @@ export async function scanCommittedSource(options: {
       if (result.reason === 'cleanup-uncertain')
         report.cleanup = 'uncertain-retained';
     }
+    // Entries that were never materialised were not scanned: no scanner may
+    // present a complete result over a partial tree.
+    if (omittedTotal(snapshot.omitted) > 0)
+      for (const slot of scanners)
+        if (slot.state === 'completed') {
+          slot.state = 'limited';
+          slot.reason = 'snapshot-entries-omitted';
+        }
     if (options.imports !== undefined) {
       const imported = aggregateScanReport(snapshot.commitSha, options.imports);
       for (const id of ['tests', 'coverage'] as const) {

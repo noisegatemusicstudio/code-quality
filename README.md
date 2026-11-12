@@ -128,9 +128,14 @@ are not a passing quality gate. The scan CLI exits 0 for help, 1 for an incomple
 execution report, and 2 for invalid input or I/O.
 
 The runtime and supplied Git installation must be trusted. This is not a
-hostile-code sandbox. Snapshot limits include a 64 MiB object store, 16 MiB of
-source, 1000 source files and 1 MiB per source file. Shallow repositories,
-alternates and linked-worktree object stores are unsupported. Keep local request
+hostile-code sandbox. Snapshot hard caps are a 512 MiB object store, 64 MiB of
+source, 10000 source files and 1 MiB per source file, within a 120 s deadline.
+Symlinks, submodules, non-ASCII paths and blobs over 1 MiB are not
+materialised: they are counted in `source.omitted` and no engine may then report
+`completed`. A failed snapshot names the guard in `sourceDetail` (for example
+`shallow-history`, `tree-entries`, `object-store-bytes`, `fsck-timeout`).
+Shallow repositories, alternates and linked-worktree object stores are
+unsupported. Keep local request
 files, advisory archives and raw reports out of public commits.
 
 ## Scanner adapter result envelope

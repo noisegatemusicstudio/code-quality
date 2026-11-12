@@ -208,8 +208,10 @@ export async function runPrettier(root: string): Promise<RunnerOutput> {
       output.files.push({ path, state: 'error' });
     }
   }
-  output.configUsed = [...configUsed].sort();
-  output.configRejected = [...rejected].sort();
+  output.configUsed = [...configUsed].sort((a, b) => a.localeCompare(b, 'en'));
+  output.configRejected = [...rejected].sort((a, b) =>
+    a.localeCompare(b, 'en'),
+  );
   return output;
 }
 

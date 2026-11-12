@@ -133,7 +133,7 @@ function cweIds(metadata: Record<string, unknown>): string[] {
     if (typeof entry === 'string')
       for (const m of entry.matchAll(/CWE-(\d{1,5})/gi))
         ids.add(`CWE-${m[1] ?? ''}`);
-  return [...ids].sort();
+  return [...ids].sort((a, b) => a.localeCompare(b, 'en'));
 }
 
 function confidenceOf(metadata: Record<string, unknown>): SemgrepConfidence {

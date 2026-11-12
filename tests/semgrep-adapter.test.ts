@@ -326,7 +326,10 @@ await test(
     assert.equal(result.refusal, 'unsupported-language');
     assert.equal(result.envelope.status, 'skipped');
     assert.equal(result.envelope.reason, 'no-supported-files');
-    assert.deepEqual(result.unsupportedFiles.sort(), ['Main.java', 'main.py']);
+    assert.deepEqual(
+      result.unsupportedFiles.sort((a, b) => a.localeCompare(b, 'en')),
+      ['Main.java', 'main.py'],
+    );
     assert.equal(await ran(), false);
     const mixed = await run('safe', options, { 'main.py': 'x = 1\n' });
     assert.equal(mixed.envelope.status, 'completed');
@@ -381,7 +384,7 @@ await test('starter rule files are valid YAML with required fields', async () =>
   const rulesDir = new URL('../../rules/semgrep/', import.meta.url);
   const files = (await readdir(rulesDir))
     .filter((f) => f.endsWith('.yaml'))
-    .sort();
+    .sort((a, b) => a.localeCompare(b, 'en'));
   assert.ok(
     files.length >= 5 && files.length <= 8,
     `rule count ${files.length}`,

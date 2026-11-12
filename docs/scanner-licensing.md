@@ -195,3 +195,8 @@ unmodified binary; nothing is bundled or redistributed.
 - SpotBugs 4.10.5: LGPL-2.1. **Not run by the hosted scan.** It analyses compiled bytecode, and a scan never builds a project or runs project code, so it is reported `skipped: requires compiled classes`, never clean. No SpotBugs artefact is pinned or installed. FindSecBugs (LGPL-3.0) is a SpotBugs plugin and waits with it.
 - JDK: Temurin 21 from a SHA-pinned `actions/setup-java` step. It is the runner's toolchain and is not sha256-pinned by this repository.
 - Checksums: neither PMD nor Checkstyle publishes a checksum file at the usual `.sha256` names for these releases, so the digests were computed from the official release assets on 2026-11-12. That detects later change and corruption, but it is not an independent upstream attestation.
+
+### Prettier (follow-up slice 11)
+
+- Prettier 3.9.10: MIT. It is already a direct dependency of this package (exact version in `package.json` and `package-lock.json`), so no new artefact is downloaded or pinned. The adapter refuses to run if the installed version differs from the approved one.
+- Run from this package's own `node_modules` with `process.execPath`; nothing is redistributed and nothing is installed at scan time. The scanned repository's Prettier, plugins and config code are never loaded (see `docs/language-profiles.md`, slice 11).

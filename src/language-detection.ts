@@ -19,13 +19,15 @@ const rules: readonly LanguageRule[] = [
   {
     language: 'TypeScript',
     test: ext(/\.(?:[cm]?ts|tsx)$/),
-    engines: ['eslint', 'semgrep'],
+    engines: ['eslint', 'prettier', 'semgrep'],
   },
   {
     language: 'JavaScript',
     test: ext(/\.(?:[cm]?js|jsx)$/),
-    engines: ['eslint', 'semgrep'],
+    engines: ['eslint', 'prettier', 'semgrep'],
   },
+  { language: 'JSON', test: ext(/\.json$/), engines: ['prettier'] },
+  { language: 'CSS', test: ext(/\.css$/), engines: ['prettier'] },
   { language: 'Python', test: ext(/\.pyi?$/), engines: ['ruff'] },
   { language: 'Java', test: ext(/\.java$/), engines: ['pmd', 'checkstyle'] },
   { language: 'Kotlin', test: ext(/\.kts?$/), engines: [] },
@@ -52,11 +54,15 @@ const rules: readonly LanguageRule[] = [
     test: ext(/(?:^|\/)\.github\/workflows\/[^/]+\.ya?ml$/),
     engines: ['actionlint', 'zizmor'],
   },
-  { language: 'YAML', test: ext(/\.ya?ml$/), engines: ['yamllint'] },
+  {
+    language: 'YAML',
+    test: ext(/\.ya?ml$/),
+    engines: ['prettier', 'yamllint'],
+  },
   {
     language: 'Markdown',
     test: ext(/\.(?:md|markdown)$/),
-    engines: ['markdownlint'],
+    engines: ['prettier', 'markdownlint'],
   },
 ];
 

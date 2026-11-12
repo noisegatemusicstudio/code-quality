@@ -23,6 +23,12 @@ import {
 import { scanCommittedSource, type ExecutionSlot } from './customer-scan.js';
 import { runEslintScan } from './eslint-adapter.js';
 import {
+  type PrettierScanReport,
+  approvedPrettierVersion as prettierVersion,
+  isPrettierInput,
+  runPrettierScan,
+} from './prettier-adapter.js';
+import {
   type EngineId,
   type EngineResult,
   type OsvMode,
@@ -391,6 +397,28 @@ export function withParseFailures(
   };
 }
 
+/**
+ * Say why a Prettier run is not a plain pass: files it could not parse, and
+ * config it would not honour (JS/TS config, plugins, custom parsers), which
+ * means the repository's own settings were replaced by Prettier defaults.
+ */
+export function withPrettierNotes(
+  result: EngineResult,
+  report: PrettierScanReport,
+): EngineResult {
+  if (result.status === 'failed') return result;
+  const parts: string[] = [];
+  if (report.parseFailures.length > 0)
+    parts.push(
+      `parse-failure: ${String(report.parseFailures.length)} file(s) Prettier cannot parse and were not checked: ${report.parseFailures.slice(0, 20).join(', ')}${report.parseFailures.length > 20 || report.truncated ? ', and more' : ''}`,
+    );
+  if (report.configRejected.length > 0)
+    parts.push(
+      `customer-config-rejected: Prettier config that needs repository code was not loaded (${report.configRejected.slice(0, 20).join(', ')}); Prettier defaults were used for the affected files, so formatting findings may differ from the project's own settings`,
+    );
+  return parts.length > 0 ? { ...result, reason: parts.join('; ') } : result;
+}
+
 /** Map a bounded-input shortfall onto an engine result, never to a clean one. */
 export function applyOmitted(
   result: EngineResult,
@@ -746,6 +774,33 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     });
     return applyOmitted(
       withParseFailures(fromEnvelope('eslint', envelope, 'bundled'), report),
+      omitted,
+      causes,
+    );
+  });
+
+  await guard('prettier', async () => {
+    // Only tracked files are read. Config candidates travel as plain text and
+    // are never executed; the runner decides which ones it may honour.
+    const { files, omitted, causes } = await readBoundedFiles(
+      options.repo,
+      paths,
+      isPrettierInput,
+    );
+    let scanned: Awaited<ReturnType<typeof runPrettierScan>>;
+    try {
+      scanned = await runPrettierScan({ scope: options.scope, files });
+    } catch {
+      return failed(
+        'prettier',
+        'installed Prettier is not the approved version',
+      );
+    }
+    return applyOmitted(
+      withPrettierNotes(
+        fromEnvelope('prettier', scanned.envelope, prettierVersion),
+        scanned.report,
+      ),
       omitted,
       causes,
     );

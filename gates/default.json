@@ -1,11 +1,12 @@
 {
   "schemaVersion": 1,
   "name": "releaseready-default",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "basis": "Industry-standard 'Sonar way' new-code gate",
   "newIssues": { "failOnSeverity": "high" },
   "secrets": { "maxFindings": 0 },
   "requiredEnginesMustComplete": true,
+  "advisoryEngines": ["prettier"],
   "newCodeCoverage": { "minPercent": 80, "onUnknown": "report" },
   "newCodeDuplication": { "maxPercent": 3, "onUnknown": "report" }
 }

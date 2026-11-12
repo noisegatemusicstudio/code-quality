@@ -4,6 +4,7 @@ import {
   isValidScope,
 } from './adapter-envelope.js';
 import type { CoverageDetail } from './coverage-detail.js';
+import { lookup } from './lookup.js';
 import { duplicatedLineSets, type DuplicationDetail } from './duplication.js';
 import {
   type Ratio,
@@ -38,6 +39,7 @@ export type UnknownReason =
   | 'zero-denominator'
   | 'no-line-data'
   | 'invalid-reference'
+  | 'no-base-ref'
   | 'diff-mismatch'
   | 'changed-file-not-in-report';
 export interface KnownMeasure {
@@ -64,8 +66,9 @@ const known = (
   scope: MeasureScopeKind,
   r: Ratio,
   extra: Partial<KnownMeasure> = {},
-): Measure =>
-  r.total === 0
+): Measure => {
+  const pct = percent(r);
+  return r.total === 0 || pct === null
     ? { id, scope, state: 'unknown', reason: 'zero-denominator' }
     : {
         id,
@@ -73,9 +76,10 @@ const known = (
         state: 'known',
         numerator: r.covered,
         denominator: r.total,
-        percent: percent(r)!,
+        percent: pct,
         ...extra,
       };
+};
 const unknown = (
   id: MeasureId,
   scope: MeasureScopeKind,
@@ -108,7 +112,14 @@ export function overallMeasures(
     if (!coverage) out.push(unknown(id, 'overall', 'no-report'));
     else if (coverage.state !== 'complete')
       out.push(unknown(id, 'overall', stateReason(coverage.state)));
-    else out.push(known(id, 'overall', pick(coverage)!));
+    else {
+      const ratio = pick(coverage);
+      out.push(
+        ratio === null
+          ? unknown(id, 'overall', 'no-report')
+          : known(id, 'overall', ratio),
+      );
+    }
   }
   if (!duplication)
     out.push(unknown('duplication.lines', 'overall', 'no-report'));
@@ -223,7 +234,7 @@ function newCodeCoverage(
     if (!report.lineHits || !report.branchHits) return fail('no-line-data');
     const set = new Set(file.lines);
     for (const line of set) {
-      const hits = report.lineHits[line];
+      const hits = lookup(report.lineHits, line);
       if (hits === undefined) continue; // not executable: not in the denominator
       lines.total++;
       if (hits > 0) lines.covered++;
@@ -255,7 +266,7 @@ function newCodeDuplication(
   const r: Ratio = { covered: 0, total: 0 };
   let unanalyzedLines = 0;
   for (const file of changed) {
-    const length = d.analyzed[file.path];
+    const length = lookup(d.analyzed, file.path);
     if (length === undefined) {
       unanalyzedLines += file.lines.length;
       continue;
@@ -264,7 +275,9 @@ function newCodeDuplication(
     if (file.lines.some((l) => l > length))
       return unknown(id, 'new-code', 'diff-mismatch');
     r.total += file.lines.length;
-    r.covered += file.lines.filter((l) => dup[file.path]?.has(l)).length;
+    r.covered += file.lines.filter((l) =>
+      lookup(dup, file.path)?.has(l),
+    ).length;
   }
   return known(id, 'new-code', r, { unanalyzedLines });
 }

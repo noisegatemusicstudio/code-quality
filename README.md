@@ -481,12 +481,28 @@ installed with `pip --require-hashes` from `scanners/semgrep-requirements.txt`
 comes from the integrity-checked `package-lock.json`.
 
 detekt and ktlint are sha256-pinned jars that need a Java runtime. The
-workflow uses the Java already on `ubuntu-latest` (`JAVA_HOME/bin/java`, else
-`/usr/bin/java`); the scan never installs one. Without a runtime both engines
+workflow's shared JDK step (`JAVA_HOME/bin/java`, or `--java`); the scan never
+installs one. Without a runtime both engines
 are reported `skipped: needs a Java runtime`, never clean, and they only run
 when the repository has tracked `.kt` or `.kts` files. They read no project
 configuration (`detekt.yml`, `.editorconfig`), apply no plugins and never format.
 The job needs `contents: read` and no secrets.
+
+**Java** (only when the repository has `.java` files; otherwise the engines are
+skipped as not applicable): PMD 7 with its bundled `quickstart` ruleset and
+Checkstyle with its bundled **Google checks** (`google_checks.xml`). Google is
+the more common modern default; Sun's `sun_checks.xml` is not used. Both read
+source files only: no build, no classpath, no project ruleset or Checkstyle
+configuration. They run on the JDK the workflow provisions with a
+SHA-pinned `actions/setup-java` step (Temurin 21); the scan finds `java` through
+`JAVA_HOME` or `--java`, and a missing JDK fails the engine rather than passing
+it (`src/java-runtime.ts` is the shared launcher for JVM engines). PMD is
+verified as a whole extracted tree, Checkstyle as one jar, both by sha256.
+Severity: PMD SARIF `error`/`warning`/`note` and Checkstyle
+`error`/`warning`/`info` map to `medium`/`low`/`info`, so by default Java style
+findings are reported and do not fail the gate. **SpotBugs is reported
+`skipped: requires compiled classes`**: it analyses bytecode and the scan never
+builds a project, so it is never shown as clean.
 
 ```yaml
 # .github/workflows/quality.yml in the caller repository
@@ -506,10 +522,12 @@ jobs:
   public repository (Settings, Actions, General, allowed actions and reusable
   workflows).
 - Inputs: `enforce` (default `false`), `node-version` (default `22.23.4`),
-  `scanners` (comma list or `all`; engines with nothing to scan are skipped),
+  `scanners` (comma list or `all`, including `pmd`, `checkstyle` and `spotbugs`; engines with nothing to scan are skipped),
   `fail-on-severity` (default `high`), `baseline-path` (optional `report.json`
   from an earlier run, enabling the new-vs-baseline column), `osv-mode` (see
-  below).
+  below), `base-ref` (push baseline for new-code measures) and `coverage-report`
+  (repo-relative Istanbul `coverage-final.json`; see
+  `docs/language-profiles.md` section 3).
 - Output: a Markdown job summary (counts per engine; skipped, failed and
   incomplete engines are listed and never shown as clean) and a
   `code-quality-results` artifact, described below.

@@ -168,12 +168,12 @@ export function parseYamllint(
     if (!m) throw new TypeError('yamllint line');
     raw.push({
       engine: 'yamllint',
-      rule: rule(m[6] ?? 'syntax'),
-      severity: m[4] ?? 'error',
+      rule: rule(m[6] || 'syntax'),
+      severity: m[4],
       path: knownPath(m[1], files),
       line: clampLine(Number(m[2])),
       column: clampLine(Number(m[3])),
-      message: m[5] ?? 'yamllint finding',
+      message: m[5],
     });
   }
   return { findings: toFindings(raw) };

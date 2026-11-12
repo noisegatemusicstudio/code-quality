@@ -85,7 +85,8 @@ export function parseShellcheckReport(
     const endLine = positive(item.endLine) ?? startLine;
     const endColumn = positive(item.endColumn) ?? startColumn;
     const level = item.level;
-    const code = typeof item.code === 'number' ? `SC${item.code}` : undefined;
+    const code =
+      typeof item.code === 'number' ? `SC${String(item.code)}` : undefined;
     if (
       path === undefined ||
       startLine === undefined ||
@@ -126,7 +127,7 @@ export function parseShfmtDiff(stdout: string): ParsedOutput {
     const hunk = /^@@ -(\d+)(?:,(\d+))? \+\d+(?:,\d+)? @@/.exec(text);
     if (!hunk) continue;
     const startLine = positive(Number(hunk[1]));
-    const count = hunk[2] === undefined ? 1 : Number(hunk[2]);
+    const count = hunk[2] ? Number(hunk[2]) : 1;
     if (path === undefined || startLine === undefined) {
       partial ??= 'invalid-output';
       continue;
@@ -201,7 +202,7 @@ export function parseZizmorReport(stdout: string): ParsedOutput | undefined {
     const location =
       locations.find(
         (l) => isRecord(l.symbolic) && l.symbolic.kind === 'Primary',
-      ) ?? locations[0];
+      ) ?? locations.at(0);
     const symbolic = location?.symbolic;
     const key =
       isRecord(symbolic) && isRecord(symbolic.key) ? symbolic.key : undefined;

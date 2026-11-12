@@ -123,6 +123,37 @@ export const mypyPin = immutableMetadata({
     'needs dependency environment: mypy --strict needs the project dependencies installed, and a scan never installs project dependencies or runs project code, so it cannot give a trustworthy result',
 });
 
+/**
+ * Java engines (RRDSCRUM-185). Both run on the JDK that the workflow provisions
+ * (src/java-runtime.ts) over source files only: no build, no classpath.
+ * PMD ships as a directory of jars, so it is pinned by the zip's sha256 and by
+ * a digest of the extracted tree; Checkstyle is one all-in-one jar.
+ */
+export const pmdPin = immutableMetadata({
+  version: '7.29.0',
+  license: 'BSD-style (PMD license)',
+  /** Digest of the extracted `pmd-bin-7.29.0` tree; see `treeDigest` in src/tree-install.ts. */
+  treeSha256:
+    '78a8499d17dd84f6d41ead909eaa324f283b5e6f4e3b50dc1144127b4e9ac248',
+  coverage:
+    'PMD quickstart Java ruleset (rulesets/java/quickstart.xml) over tracked .java files; source only, no auxclasspath, so type-resolution rules are limited; project rulesets are never read',
+});
+export const checkstylePin = immutableMetadata({
+  version: '14.4.0',
+  license: 'LGPL-2.1',
+  /** sha256 of the all-in-one jar (`checkstyle-14.4.0-all.jar`). */
+  sha256: 'c0a521e54eabd1ece4ff7bd84cf231b012615745ed3aa4fb27ab0ca73097250c',
+  coverage:
+    'Checkstyle bundled Google checks (google_checks.xml) over tracked .java files; no project configuration or suppressions are read',
+});
+/** SpotBugs analyses compiled bytecode; a scan never builds, so it is never run. */
+export const spotbugsPin = immutableMetadata({
+  version: '4.10.5',
+  license: 'LGPL-2.1',
+  skipReason:
+    'requires compiled classes: SpotBugs analyses bytecode, and a scan never builds the project or runs project code, so it cannot give a trustworthy result',
+});
+
 /** Lint engines added after the first set; all run with bundled defaults only. */
 export const hadolintPin = immutableMetadata({
   version: '2.15.1',
@@ -280,5 +311,31 @@ export const releaseAssets = immutableMetadata({
     binarySha256: tflintPin.sha256,
     source:
       'https://github.com/terraform-linters/tflint/releases/download/v0.66.0/checksums.txt',
+  },
+  checkstyle: {
+    url: 'https://github.com/checkstyle/checkstyle/releases/download/checkstyle-14.4.0/checkstyle-14.4.0-all.jar',
+    assetSha256: checkstylePin.sha256,
+    member: null,
+    binarySha256: checkstylePin.sha256,
+    source:
+      'No upstream checksum file is published for 14.4.0; sha256 computed from the official release asset downloaded 2026-11-12',
+  },
+});
+
+/**
+ * Official release archives that install as a directory tree. `assetSha256`
+ * is the zip as published; `treeSha256` is the digest of the extracted `member`
+ * directory and must equal the engine pin. Both are verified before anything
+ * is executed, and the tree is verified again before each run.
+ */
+export const releaseTrees = immutableMetadata({
+  pmd: {
+    url: 'https://github.com/pmd/pmd/releases/download/pmd_releases%2F7.29.0/pmd-dist-7.29.0-bin.zip',
+    assetSha256:
+      'd27177c185b837fa57f097e482d1253468aa035379c5eb2671fa0a279109b179',
+    member: 'pmd-bin-7.29.0',
+    treeSha256: pmdPin.treeSha256,
+    source:
+      'No upstream checksum file is published for 7.29.0; sha256 computed from the official release asset downloaded 2026-11-12',
   },
 });

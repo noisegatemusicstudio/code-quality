@@ -7,11 +7,12 @@ Scope: Proves detekt and ktlint report parsing, severity mapping, fixed argument
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { access, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { access, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import { writeFakeExecutable } from './fake-executable.js';
+import { jvmFlags } from '../src/java-runtime.js';
 import { runAdapter } from '../src/scanner-adapter.js';
 import {
   createDetektAdapter,
@@ -27,11 +28,7 @@ import {
   normaliseSeverity,
   type EngineId,
 } from '../src/quality-scan.js';
-import {
-  findJava,
-  runEngines,
-  scopeFromEnvironment,
-} from '../src/quality-scan-run.js';
+import { runEngines, scopeFromEnvironment } from '../src/quality-scan-run.js';
 import { detektPin, ktlintPin } from '../src/scanner-pins.js';
 
 const linux = { skip: process.platform !== 'linux' };
@@ -75,8 +72,9 @@ const args = process.argv.slice(2);
 fs.writeFileSync(${JSON.stringify(marker)}, 'ran');
 const mode = fs.readFileSync(${JSON.stringify(modeFile)}, 'utf8').trim();
 const [engine, kind] = mode.split(':');
-if (args[0] !== '-Xmx1g' || args[1] !== '-jar') process.exit(4);
-const rest = args.slice(3);
+const flags = ${JSON.stringify(jvmFlags)};
+if (JSON.stringify(args.slice(0, flags.length)) !== JSON.stringify(flags) || args[flags.length] !== '-jar') process.exit(4);
+const rest = args.slice(flags.length + 2);
 if (rest[0] === '--version') { console.log(engine === 'detekt' ? '${detektVersion}' : 'ktlint ${ktlintVersion}'); process.exit(0); }
 const expected = engine === 'detekt' ? ${JSON.stringify(detektArgs)} : ${JSON.stringify(ktlintArgs)};
 if (JSON.stringify(rest) !== JSON.stringify(expected)) { console.error('unexpected args'); process.exit(3); }
@@ -309,11 +307,10 @@ const scanRepo = async (repo: string, java?: string) =>
       repo,
       scope,
       selected,
-      tools: {},
+      tools: java ? { java } : {},
       installErrors: {},
       gitExecutable: 'git',
       rulesDirectory: repo,
-      java,
     })
   ).filter((r) => selected.includes(r.engine));
 
@@ -352,16 +349,6 @@ await test('Kotlin with Java but no installed engine fails, never clean', async 
   } finally {
     await rm(repo, { recursive: true, force: true });
   }
-});
-
-await test('findJava prefers JAVA_HOME/bin/java and ignores a relative or missing home', async () => {
-  const home = join(dir, 'jdk');
-  await mkdir(join(home, 'bin'), { recursive: true });
-  await writeFakeExecutable(join(home, 'bin'), 'java', '');
-  assert.equal(await findJava({ JAVA_HOME: home }), join(home, 'bin', 'java'));
-  const fallback = await findJava({});
-  assert.equal(await findJava({ JAVA_HOME: '/nonexistent' }), fallback);
-  assert.equal(await findJava({ JAVA_HOME: 'relative/path' }), fallback);
 });
 
 await rm(dir, { recursive: true, force: true }).catch(() => undefined);

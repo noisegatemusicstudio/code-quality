@@ -13,11 +13,12 @@ import {
 } from './quality-scan.js';
 import { buildManifest, ManifestError } from './quality-manifest.js';
 import { detectLanguages } from './language-detection.js';
-import { loadGate, decideWithGate } from './quality-gate.js';
+import { resolveJava } from './java-runtime.js';
+import { loadGate, decideWithGate, gateMeasuresFrom } from './quality-gate.js';
+import { computeNewCode, readCoverageReport } from './new-code.js';
 import {
   applyGitleaksExceptions,
   ExceptionSourceError,
-  findJava,
   loadExceptions,
   type ExceptionLoad,
   installEngine,
@@ -84,7 +85,7 @@ async function run(args: string[]): Promise<number> {
     (failOnOption !== undefined && !isSeverity(failOnOption))
   ) {
     process.stderr.write(
-      `invalid input: ${unknown.length ? `unknown scanners ${unknown.join(', ')}` : `fail-on-severity ${failOnOption}`}\n`,
+      `invalid input: ${unknown.length ? `unknown scanners ${unknown.join(', ')}` : `fail-on-severity ${failOnOption ?? ''}`}\n`,
     );
     return 2;
   }
@@ -172,6 +173,11 @@ async function run(args: string[]): Promise<number> {
   else
     errors.yamllint =
       option(args, 'yamllint-error') ?? 'yamllint not installed';
+  const java = resolveJava(option(args, 'java'), process.env);
+  if (java.java) tools.java = java.java;
+  else
+    for (const id of ['pmd', 'checkstyle'])
+      errors[id] ??= java.error ?? 'no Java runtime';
   const markdownlint = option(args, 'markdownlint-cli2');
   if (markdownlint) tools.markdownlint = resolve(markdownlint);
   else
@@ -194,7 +200,6 @@ async function run(args: string[]): Promise<number> {
       option(args, 'rules') ?? join(repo, 'rules/semgrep'),
     ),
     osvMode,
-    java: await findJava(process.env),
   });
   const now = new Date();
   const results = scanned.map((r) =>
@@ -225,7 +230,36 @@ async function run(args: string[]): Promise<number> {
   if (failOnOption !== undefined && isSeverity(failOnOption))
     gate = { ...gate, newIssues: { failOnSeverity: failOnOption } };
   const languages = detectLanguages(await trackedPaths(repo));
-  const decision = decideWithGate(results, { enforce, gate, baseline });
+  // New-code measures: base from the PR event (pull requests) or --base-ref,
+  // read from local git only. The scan never runs tests; coverage is a
+  // caller-supplied report.
+  const coveragePath = option(args, 'coverage');
+  let coverageReport: string | undefined;
+  if (coveragePath) {
+    try {
+      coverageReport = await readCoverageReport(resolve(coveragePath));
+    } catch {
+      process.stderr.write('invalid input: coverage report unreadable\n');
+      return 2;
+    }
+  }
+  const newCode = await computeNewCode({
+    git: gitExecutable,
+    repo,
+    headSha: commitSha,
+    env: process.env,
+    readEvent: (path) => readFile(path, 'utf8'),
+    baseRef: option(args, 'base-ref'),
+    tracked: await trackedPaths(repo),
+    ...(coverageReport === undefined ? {} : { coverageReport }),
+    jscpd: results.find((r) => r.engine === 'jscpd'),
+  });
+  const decision = decideWithGate(results, {
+    enforce,
+    gate,
+    baseline,
+    measures: gateMeasuresFrom(newCode.measures),
+  });
   const summary = renderSummary({
     commitSha,
     results,
@@ -233,6 +267,7 @@ async function run(args: string[]): Promise<number> {
     baseline,
     languages,
     exceptions: loaded,
+    newCode,
   });
   await mkdir(join(out, 'envelopes'), { recursive: true });
   await writeFile(
@@ -244,6 +279,7 @@ async function run(args: string[]): Promise<number> {
         results,
         decision,
         languages,
+        newCode,
       }),
       null,
       2,
@@ -270,6 +306,7 @@ async function run(args: string[]): Promise<number> {
         codeQualityRef: option(args, 'code-quality-ref') ?? '',
         results,
         envelopeFiles,
+        measures: newCode.measures,
       });
       await writeFile(
         join(out, 'manifest.json'),

@@ -57,7 +57,7 @@ await test('real jscpd 5.4.3 report is complete with snapshot-counted lines', as
       directory,
     );
     assert.equal(external?.findingCount, 1);
-    assert.equal(external?.coveredFileCount, 3);
+    assert.equal(external.coveredFileCount, 3);
   } finally {
     await rm(directory, { recursive: true, force: true });
   }

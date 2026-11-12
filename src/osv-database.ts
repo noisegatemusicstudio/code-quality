@@ -130,8 +130,7 @@ function zipEnvelope(
 function boundJson(value: unknown): void {
   const pending: { value: unknown; depth: number }[] = [{ value, depth: 0 }];
   let nodes = 0;
-  while (pending.length) {
-    const item = pending.pop()!;
+  for (let item = pending.pop(); item !== undefined; item = pending.pop()) {
     if (++nodes > 200_000 || item.depth > 64) reject();
     if (typeof item.value === 'object' && item.value !== null) {
       for (const child of Object.values(item.value)) {
@@ -246,6 +245,7 @@ async function validateArchive(
   profile: OsvValidationProfile,
   expectedEcosystem: 'npm',
 ): Promise<Omit<ValidatedOsvDatabase, 'sha256' | 'compressedBytes'>> {
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- exported API: JS callers can pass any profile at runtime.
   if (profile !== 'strict-schema-v1' && profile !== 'npm-metadata-v1') reject();
   const centralStart = envelope.start;
   if (zip.entryCount !== envelope.count || zip.entryCount > limits.entries)
@@ -391,6 +391,7 @@ export async function validateOsvDatabaseZip(
   let zip: ZipFile | undefined;
   try {
     if (
+      // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- exported API: JS callers can pass any ecosystem at runtime.
       expectedEcosystem !== 'npm' ||
       !Buffer.isBuffer(archive) ||
       archive.length > OSV_DATABASE_LIMITS.compressedBytes
@@ -443,6 +444,7 @@ export async function validateOsvDatabaseFile(
   let file: Awaited<ReturnType<typeof open>> | undefined;
   let zip: ZipFile | undefined;
   try {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- exported API: JS callers can pass any ecosystem at runtime.
     if (expectedEcosystem !== 'npm') reject();
     file = await open(
       path,

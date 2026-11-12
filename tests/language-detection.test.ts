@@ -44,13 +44,13 @@ await test('every language present is listed with its file count', () => {
 await test('Python is covered by Ruff, not skipped', () => {
   const python = detectLanguages(paths).find((l) => l.language === 'Python');
   assert.equal(python?.status, 'covered');
-  assert.deepEqual(python?.engines, ['ruff']);
+  assert.deepEqual(python.engines, ['ruff']);
 });
 
 await test('Kotlin is covered by detekt and ktlint, not skipped', () => {
   const kotlin = detectLanguages(paths).find((l) => l.language === 'Kotlin');
   assert.equal(kotlin?.status, 'covered');
-  assert.deepEqual(kotlin?.engines, ['detekt', 'ktlint']);
+  assert.deepEqual(kotlin.engines, ['detekt', 'ktlint']);
 });
 
 await test('languages without an engine are skipped, never clean', () => {

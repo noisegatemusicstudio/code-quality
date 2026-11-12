@@ -7,7 +7,9 @@ import {
   isSafeRelativePath,
   redactMessage,
 } from './adapter-envelope.js';
-import { assembleFindings, relativeToRoot } from './finding-assembly.js';
+import { assembleFindings } from './finding-assembly.js';
+import { javaRuntime } from './java-runtime.js';
+import { relativeSourcePath } from './source-paths.js';
 import {
   type ParsedOutput,
   type ScannerAdapter,
@@ -28,7 +30,7 @@ export const detektVersion = detektPin.version;
 export const ktlintVersion = ktlintPin.version;
 export const kotlinFile = /\.kts?$/;
 export const javaSkipReason =
-  'needs a Java runtime: no java executable was found (JAVA_HOME/bin/java or /usr/bin/java), so the Kotlin engines cannot run';
+  'needs a Java runtime: pass --java or set JAVA_HOME (the workflow uses actions/setup-java), so the Kotlin engines cannot run';
 
 const jarBytes = 128 * 1024 * 1024;
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -60,7 +62,12 @@ function toCandidate(
   sourceRoot: string | undefined,
 ): Omit<AdapterFinding, 'fingerprint'> | undefined {
   const path =
-    typeof d.path === 'string' ? relativeToRoot(d.path, sourceRoot) : undefined;
+    typeof d.path === 'string'
+      ? relativeSourcePath(
+          d.path.startsWith('file://') ? d.path.slice(7) : d.path,
+          sourceRoot,
+        )
+      : undefined;
   const startLine = position(d.line);
   const startColumn = position(d.column) ?? 1;
   const endLine = position(d.endLine) ?? startLine;
@@ -212,7 +219,7 @@ function jarAdapter(
     executable,
     executableSha256,
     executableMaxBytes: jarBytes,
-    runtime: { executable: java, args: ['-Xmx1g', '-jar'] },
+    runtime: javaRuntime(java, ['-jar', '{engine}']),
     versionArgs: ['--version'],
     versionOutput,
     fixedArgs: spec.fixedArgs,

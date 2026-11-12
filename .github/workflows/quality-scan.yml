@@ -13,7 +13,7 @@ on:
         type: string
         default: 22.23.4
       scanners:
-        description: 'Comma list of eslint, gitleaks, osv, trivy, semgrep, jscpd, ruff, mypy, detekt, ktlint, shellcheck, shfmt, actionlint, zizmor, hadolint, tflint, yamllint, markdownlint, or all (applicable engines only).'
+        description: 'Comma list of eslint, gitleaks, osv, trivy, semgrep, jscpd, ruff, mypy, pmd, checkstyle, spotbugs, detekt, ktlint, shellcheck, shfmt, actionlint, zizmor, hadolint, tflint, yamllint, markdownlint, or all (applicable engines only).'
         type: string
         default: all
       code-quality-ref:
@@ -32,6 +32,14 @@ on:
         description: Optional repo-relative path of a previous report.json for the new-vs-baseline split.
         type: string
         default: ''
+      base-ref:
+        description: 'Baseline ref for new-code measures on pushes (pull requests use their base SHA). Empty: new-code measures are unknown on pushes.'
+        type: string
+        default: ''
+      coverage-report:
+        description: 'Optional repo-relative path of an Istanbul coverage-final.json produced by the caller; the scan never runs tests. Empty: coverage is unknown.'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -47,6 +55,8 @@ jobs:
       CQ_FAIL_ON: ${{ inputs.fail-on-severity }}
       CQ_BASELINE: ${{ inputs.baseline-path }}
       CQ_OSV_MODE: ${{ inputs.osv-mode }}
+      CQ_BASE_REF: ${{ inputs.base-ref }}
+      CQ_COVERAGE: ${{ inputs.coverage-report }}
     steps:
       - name: Require a full-SHA code-quality-ref
         run: |
@@ -70,6 +80,13 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: ${{ inputs.node-version }}
+      # Shared by every JVM engine (Java: PMD, Checkstyle). The scan resolves
+      # `java` from JAVA_HOME (src/java-runtime.ts); add JVM engines here, not a second JDK step.
+      - name: Set up JDK for JVM engines
+        uses: actions/setup-java@b6effb05e454b25005698d916606bdc6ffcbf961 # v5.7.0
+        with:
+          distribution: temurin
+          java-version: '21'
       - name: Build the scanner tooling
         working-directory: .quality-tool
         run: |
@@ -118,6 +135,8 @@ jobs:
           # markdownlint-cli2 comes from the package-lock.json (integrity-checked) install above.
           args+=(--markdownlint-cli2 "$GITHUB_WORKSPACE/.quality-tool/node_modules/markdownlint-cli2/markdownlint-cli2-bin.mjs")
           if [ -n "$CQ_BASELINE" ]; then args+=(--baseline "$CQ_BASELINE"); fi
+          if [ -n "$CQ_BASE_REF" ]; then args+=(--base-ref "$CQ_BASE_REF"); fi
+          if [ -n "$CQ_COVERAGE" ]; then args+=(--coverage "$GITHUB_WORKSPACE/$CQ_COVERAGE"); fi
           node .quality-tool/dist/src/quality-scan-cli.js "${args[@]}"
         env:
           SEMGREP_BIN: ${{ steps.semgrep.outputs.bin }}

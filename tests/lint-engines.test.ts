@@ -413,7 +413,7 @@ await test('parsers reject malformed entries rather than guessing', () => {
     }),
   );
   assert.equal(partial?.partial, 'invalid-output');
-  assert.equal(partial?.findings.length, 0);
+  assert.equal(partial.findings.length, 0);
   assert.equal(parseActionlintReport('{}'), undefined);
   assert.equal(parseZizmorReport('{}'), undefined);
   assert.equal(parseShfmtDiff('').findings.length, 0);

@@ -7,7 +7,8 @@ import {
   isSafeRelativePath,
   redactMessage,
 } from './adapter-envelope.js';
-import { assembleFindings, relativeToRoot } from './finding-assembly.js';
+import { assembleFindings } from './finding-assembly.js';
+import { relativeSourcePath } from './source-paths.js';
 import {
   type ParsedOutput,
   type ScannerAdapter,
@@ -78,7 +79,7 @@ export function parseRuffReport(
     const start = isRecord(item) ? position(item.location) : undefined;
     const end = isRecord(item) ? position(item.end_location) : undefined;
     let path: unknown = isRecord(item) ? item.filename : undefined;
-    if (typeof path === 'string') path = relativeToRoot(path, sourceRoot);
+    if (typeof path === 'string') path = relativeSourcePath(path, sourceRoot);
     const code = isRecord(item) ? item.code : undefined;
     if (
       !isRecord(item) ||

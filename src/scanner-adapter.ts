@@ -62,12 +62,6 @@ export interface ScannerAdapter {
   /** Size cap for the executable read; defaults to `adapterLimits.executableBytes`, at most the ceiling. */
   executableMaxBytes?: number;
   /**
-   * Interpreter for an executable that is not run directly (a JVM jar). The
-   * verified copy is passed as the last runtime argument, so the runtime runs
-   * exactly the hashed bytes: `<runtime.executable> ...<runtime.args> <copy> ...args`.
-   */
-  runtime?: { executable: string; args: readonly string[] };
-  /**
    * Engines whose report reporter writes a file (for example jscpd) declare
    * it here. `path` is relative to the private workspace (the engine runs in
    * `<workspace>/source`, so arguments reach it as `../<dir>`); the directory
@@ -75,6 +69,15 @@ export interface ScannerAdapter {
    * successful exit, and `parse` receives its content instead of stdout.
    */
   outputFile?: { path: string; maxBytes: number };
+  /**
+   * JVM engines: the process that actually runs is `runtime.executable` (the
+   * JDK's `java`) with `runtime.args` first, and `executable` is the pinned
+   * artifact those arguments point at. The literal argument `{engine}` is
+   * replaced by the verified private copy of `executable` (a jar), or by
+   * `executable` itself when it has no `executableSha256` (an installed
+   * distribution whose tree the caller verified).
+   */
+  runtime?: { executable: string; args: readonly string[] };
   /** Engine needs base tools (for example `uname`): run with a fixed system PATH. */
   systemPath?: boolean;
   /** Run before the scan; its trimmed stdout must equal `versionOutput`. */
@@ -111,13 +114,13 @@ export interface AdapterRequest {
 /** Check the adapter declaration itself; a bad adapter never executes. */
 function adapterProblem(adapter: ScannerAdapter): string | undefined {
   if (
-    !isAbsolute(adapter.executable) ||
-    adapter.executable.includes('\0') ||
-    forbiddenExecutables.has(basename(adapter.executable)) ||
-    (adapter.runtime !== undefined &&
-      (!isAbsolute(adapter.runtime.executable) ||
-        adapter.runtime.executable.includes('\0') ||
-        forbiddenExecutables.has(basename(adapter.runtime.executable))))
+    ![adapter.executable, adapter.runtime?.executable].every(
+      (path) =>
+        path === undefined ||
+        (isAbsolute(path) &&
+          !path.includes('\0') &&
+          !forbiddenExecutables.has(basename(path))),
+    )
   )
     return 'executable';
   if (
@@ -270,11 +273,17 @@ export async function runAdapter(
         recursive: true,
         mode: 0o700,
       });
+    // JVM engines run `java <runtime args> <engine args>`; others run the engine.
     const launch = (args: readonly string[]) =>
       adapter.runtime
         ? {
             executable: adapter.runtime.executable,
-            args: [...adapter.runtime.args, executable, ...args],
+            args: [
+              ...adapter.runtime.args.map((a) =>
+                a === '{engine}' ? executable : a,
+              ),
+              ...args,
+            ],
           }
         : { executable, args };
     const version = await runScannerProcess({

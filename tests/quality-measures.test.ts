@@ -337,7 +337,7 @@ await test('jscpd report: locations on both sides, totals, thresholds', () => {
     ['5.4.3', 5, 50],
   );
   const m = overallMeasures(undefined, d)[2];
-  assert.ok(m?.state === 'known');
+  assert.ok(m.state === 'known');
   assert.equal(m.percent, 21.875);
   assert.equal(evaluateThreshold(m, { max: 20 }), 'fail');
   assert.equal(evaluateThreshold(m, { max: 21.875 }), 'pass');
@@ -450,8 +450,8 @@ await test('jscpd adapter pins the version, allowlists args and emits both sides
   const parsed = adapter.parse(reportAt, { sourceRoot: snapshot });
   rmSync(snapshot, { recursive: true, force: true });
   assert.equal(parsed?.findings.length, 4);
-  assert.equal(new Set(parsed?.findings.map((f) => f.fingerprint)).size, 4);
-  assert.equal(parsed?.findings[0]?.message, 'Duplicate of src/y.ts:1-10');
+  assert.equal(new Set(parsed.findings.map((f) => f.fingerprint)).size, 4);
+  assert.equal(parsed.findings[0]?.message, 'Duplicate of src/y.ts:1-10');
   assert.equal(adapter.parse('nonsense', { sourceRoot: '/repo' }), undefined);
 });
 
@@ -491,7 +491,7 @@ await test('assembled output is versioned, has provenance and no ratings', () =>
   });
   assert.equal(out.measures.length, 6);
   assert.equal(out.provenance.coverage?.source, 'imported-unverified');
-  assert.deepEqual(out.provenance.coverage?.exclusionPatterns, ['src/b.ts']);
+  assert.deepEqual(out.provenance.coverage.exclusionPatterns, ['src/b.ts']);
   assert.equal(out.provenance.newCode?.referenceCommitSha, A);
   const text = JSON.stringify(out.measures);
   assert.equal(/rating|debt|score/i.test(text), false);

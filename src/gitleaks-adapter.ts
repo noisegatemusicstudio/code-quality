@@ -201,6 +201,7 @@ export function createGitleaksAdapter(
     if (options.range || options.repoPath || options.shallow)
       throw new TypeError('Invalid gitleaks options');
     fixedArgs = ['dir', '.', ...common];
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- unknown modes must be refused at runtime, not assumed to be commit-range.
   } else if (options.mode === 'commit-range') {
     const r = options.range;
     if (!r || !sha.test(r.base) || !sha.test(r.head) || !abs(options.repoPath))
@@ -320,7 +321,9 @@ export function classifyGitleaksEnvelope(
     { exception: GitleaksException; end: number }
   >();
   for (const e of context.exceptions ?? []) {
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- exception entries come from parsed JSON and can be null.
     const start = toTime(e?.reviewedAt);
+    // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- exception entries come from parsed JSON and can be null.
     const end = toTime(e?.expiresAt);
     if (
       start === undefined ||

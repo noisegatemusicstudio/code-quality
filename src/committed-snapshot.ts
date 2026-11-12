@@ -94,7 +94,7 @@ export async function createCommittedSnapshot(options: {
     throw fail();
   let directory = '';
   let gitDirectory = '';
-  let uncertain = false;
+  const cleanup = { uncertain: false };
   const dispose = async () => {
     try {
       if (directory) await rm(directory, { recursive: true, force: true });
@@ -237,9 +237,9 @@ export async function createCommittedSnapshot(options: {
       const result = await runScannerProcess({
         executable: '/usr/bin/prlimit',
         args: [
-          `--as=${snapshotBounds.gitAddressSpaceBytes}:${snapshotBounds.gitAddressSpaceBytes}`,
-          `--data=${snapshotBounds.gitDataBytes}:${snapshotBounds.gitDataBytes}`,
-          `--cpu=${snapshotBounds.gitCpuSeconds}:${snapshotBounds.gitCpuSeconds}`,
+          `--as=${String(snapshotBounds.gitAddressSpaceBytes)}:${String(snapshotBounds.gitAddressSpaceBytes)}`,
+          `--data=${String(snapshotBounds.gitDataBytes)}:${String(snapshotBounds.gitDataBytes)}`,
+          `--cpu=${String(snapshotBounds.gitCpuSeconds)}:${String(snapshotBounds.gitCpuSeconds)}`,
           '--fsize=1048576:1048576',
           '--',
           options.gitExecutable,
@@ -256,7 +256,7 @@ export async function createCommittedSnapshot(options: {
         outputLimit: limit,
       });
       if (result.state === 'cleanup-uncertain') {
-        uncertain = true;
+        cleanup.uncertain = true;
         throw new SnapshotError('cleanup-uncertain');
       }
       if (result.state === 'timed-out') throw fail(`${detail}-timeout`);
@@ -416,9 +416,9 @@ export async function createCommittedSnapshot(options: {
       dispose,
     };
   } catch (error) {
-    if (!uncertain) await dispose();
+    if (!cleanup.uncertain) await dispose();
     throw error instanceof SnapshotError ? error : fail('io-error');
   } finally {
-    if (!uncertain) await disposeObjects();
+    if (!cleanup.uncertain) await disposeObjects();
   }
 }

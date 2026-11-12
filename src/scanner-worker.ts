@@ -8,7 +8,8 @@ import { validateDeclarationBundle } from './declaration-bundle.js';
 
 // Private worker: fixed bundled config only; no repository modules/config/scripts.
 async function main() {
-  const [id, root, bundlePath] = process.argv.slice(2);
+  const [id, root] = process.argv.slice(2);
+  const bundlePath = process.argv.at(4);
   if ((id !== 'eslint' && id !== 'typescript') || !root) throw new Error();
   if (ESLint.version !== '10.13.0' || ts.version !== '5.9.3') throw new Error();
   const files: string[] = [];

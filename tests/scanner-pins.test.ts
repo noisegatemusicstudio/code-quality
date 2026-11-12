@@ -275,7 +275,7 @@ await test('customer-scan parsers reuse the adapter parsers and relativize paths
   );
   const g = parseExternalReport('gitleaks', gl, root);
   assert.equal(g?.findingCount, 1);
-  assert.equal(g?.findings[0]?.path, 'a/b.ts');
+  assert.equal(g.findings[0]?.path, 'a/b.ts');
   // Entries the shared parser would skip make the whole count report invalid.
   assert.equal(parseExternalReport('gitleaks', gl, '/other'), null);
   const snap = mkdtempSync(join(tmpdir(), 'jscpd-pins-'));
@@ -284,8 +284,8 @@ await test('customer-scan parsers reuse the adapter parsers and relativize paths
   const j = parseExternalReport('jscpd', Buffer.from(report('')), snap);
   rmSync(snap, { recursive: true, force: true });
   assert.equal(j?.findingCount, 1);
-  assert.equal(j?.coveredFileCount, 2);
-  assert.equal(j?.findings[0]?.path, 'a.ts');
+  assert.equal(j.coveredFileCount, 2);
+  assert.equal(j.findings[0]?.path, 'a.ts');
   const osvRaw = Buffer.from(
     JSON.stringify({
       results: [
@@ -305,8 +305,8 @@ await test('customer-scan parsers reuse the adapter parsers and relativize paths
   );
   const o = parseOsvReport(osvRaw, [`${root}/package-lock.json`], root);
   assert.equal(o?.findingCount, 1);
-  assert.equal(o?.findings[0]?.path, 'package-lock.json');
-  assert.equal(o?.findings[0]?.ruleId, 'GHSA-aaaa-bbbb-cccc');
+  assert.equal(o.findings[0]?.path, 'package-lock.json');
+  assert.equal(o.findings[0]?.ruleId, 'GHSA-aaaa-bbbb-cccc');
 });
 
 process.on('exit', () => {

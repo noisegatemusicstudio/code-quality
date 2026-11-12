@@ -5,6 +5,7 @@ import {
   isTerraformFile,
   isYamlFile,
 } from './lint-adapters.js';
+import { isJavaFile } from './java-adapters.js';
 import { renderLanguages, type LanguageReport } from './language-detection.js';
 
 /** Engines the reusable `quality-scan` workflow can run, in report order. */
@@ -17,6 +18,9 @@ export const engineIds = [
   'jscpd',
   'ruff',
   'mypy',
+  'pmd',
+  'checkstyle',
+  'spotbugs',
   'detekt',
   'ktlint',
   'shellcheck',
@@ -149,6 +153,9 @@ export function detectApplicability(
       : no('no JavaScript or TypeScript files'),
     ruff: some((p) => pythonExtension.test(p)) ? yes : no('no Python files'),
     mypy: some((p) => pythonExtension.test(p)) ? yes : no('no Python files'),
+    pmd: some((p) => isJavaFile(p)) ? yes : no('no Java files'),
+    checkstyle: some((p) => isJavaFile(p)) ? yes : no('no Java files'),
+    spotbugs: some((p) => isJavaFile(p)) ? yes : no('no Java files'),
     detekt: some((p) => kotlinExtension.test(p)) ? yes : no('no Kotlin files'),
     ktlint: some((p) => kotlinExtension.test(p)) ? yes : no('no Kotlin files'),
     shellcheck: some((p) => shellFile.test(p)) ? yes : no('no shell scripts'),
@@ -226,10 +233,18 @@ export function normaliseSeverity(
   // Lint engines: errors are medium, warnings low, notices and style info.
   // markdownlint has no native levels (recorded as `error`), so it ranks low.
   if (engine === 'markdownlint') return label === 'error' ? 'low' : 'high';
-  if (engine === 'hadolint' || engine === 'tflint' || engine === 'yamllint') {
+  if (
+    engine === 'hadolint' ||
+    engine === 'tflint' ||
+    engine === 'yamllint' ||
+    engine === 'pmd' ||
+    engine === 'checkstyle'
+  ) {
+    // PMD reports SARIF levels (error, warning, note); Checkstyle error, warning, info.
     const lint: Record<string, Severity> = {
       error: 'medium',
       warning: 'low',
+      note: 'info',
       notice: 'info',
       info: 'info',
       style: 'info',
@@ -286,7 +301,7 @@ export function decide(
   if (broken.length) reasons.push(`failed or incomplete: ${broken.join(', ')}`);
   if (blocking)
     reasons.push(
-      `${blocking} finding(s) at or above ${options.failOnSeverity}`,
+      `${String(blocking)} finding(s) at or above ${options.failOnSeverity}`,
     );
   const wouldFail = reasons.length > 0;
   return {
@@ -359,6 +374,7 @@ export function buildReport(input: {
   results: readonly EngineResult[];
   decision: Decision;
   languages?: readonly LanguageReport[];
+  newCode?: unknown;
 }): unknown {
   return {
     schemaVersion: 1,
@@ -366,6 +382,7 @@ export function buildReport(input: {
     commitSha: input.commitSha,
     decision: input.decision,
     languages: input.languages ?? [],
+    newCode: input.newCode ?? null,
     engines: input.results.map((r) => ({
       engine: r.engine,
       status: r.status,
@@ -377,6 +394,14 @@ export function buildReport(input: {
     })),
   };
 }
+
+/** Human text for an unknown measure's reason. */
+export const unknownText = (reason: string): string =>
+  reason === 'no-report'
+    ? 'no coverage report supplied'
+    : reason === 'no-base-ref'
+      ? 'no comparison base (not a pull request and no base ref given)'
+      : reason.replace(/-/g, ' ');
 
 /** Escape text for a Markdown table cell so engine output cannot inject markup. */
 export const mdEscape = (value: string): string =>
@@ -395,7 +420,7 @@ const topRules = (
   return [...counts]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'en'))
     .slice(0, count)
-    .map(([rule, n]) => `${mdEscape(rule)} (${n})`)
+    .map(([rule, n]) => `${mdEscape(rule)} (${String(n)})`)
     .join(', ');
 };
 
@@ -411,6 +436,18 @@ export function renderSummary(input: {
     pendingError?: string;
   };
   languages?: readonly LanguageReport[];
+  newCode?: {
+    baseSource: string;
+    baseSha: string | null;
+    measures: readonly {
+      id: string;
+      state: string;
+      percent?: number;
+      numerator?: number;
+      denominator?: number;
+      reason?: string;
+    }[];
+  };
 }): string {
   const { results, decision, baseline } = input;
   const lines: string[] = [
@@ -431,12 +468,12 @@ export function renderSummary(input: {
     const notes = [
       r.status === 'skipped' && r.skipKind ? `skipped (${r.skipKind})` : '',
       r.reason ? mdEscape(r.reason) : '',
-      r.excepted ? `${r.excepted} excepted (reviewed exception)` : '',
+      r.excepted ? `${String(r.excepted)} excepted (reviewed exception)` : '',
     ]
       .filter(Boolean)
       .join(': ');
     lines.push(
-      `| ${r.engine}${r.version ? ` ${mdEscape(r.version)}` : ''} | ${r.status} | ${ran ? `${r.findings.length}${r.status === 'incomplete' ? '+' : ''}` : '–'} | ${fresh ? fresh.length : '–'} | ${notes} |`,
+      `| ${r.engine}${r.version ? ` ${mdEscape(r.version)}` : ''} | ${r.status} | ${ran ? `${String(r.findings.length)}${r.status === 'incomplete' ? '+' : ''}` : '–'} | ${String(fresh ? fresh.length : '–')} | ${notes} |`,
     );
   }
   const ex = input.exceptions;
@@ -485,6 +522,24 @@ export function renderSummary(input: {
         (r) => `- **${r.engine}**: ${mdEscape(r.disclosure ?? '')}`,
       ),
     );
+  if (input.newCode) {
+    const nc = input.newCode;
+    lines.push(
+      '',
+      '### New-code measures',
+      '',
+      nc.baseSha
+        ? `Compared with \`${nc.baseSha.slice(0, 12)}\` (${nc.baseSource === 'pull-request-base' ? 'pull request base' : 'configured base ref'}).`
+        : 'No comparison base, so new code could not be determined.',
+      '',
+      '| Measure | Result | Lines |',
+      '| --- | --- | --- |',
+      ...nc.measures.map(
+        (m) =>
+          `| ${m.id} | ${m.state === 'known' ? `${(Math.round((m.percent ?? 0) * 100) / 100).toString()}%` : `unknown: ${mdEscape(unknownText(m.reason ?? ''))}`} | ${m.state === 'known' ? `${String(m.numerator)}/${String(m.denominator)}` : '–'} |`,
+      ),
+    );
+  }
   lines.push(
     '',
     '### Gate',

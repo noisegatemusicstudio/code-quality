@@ -126,7 +126,7 @@ export function jscpdFindings(clones: readonly Clone[]): AdapterFinding[] {
           endLine: a.endLine,
           endColumn: 1,
         },
-        message: `Duplicate of ${b.path}:${b.startLine}-${b.endLine}`,
+        message: `Duplicate of ${b.path}:${String(b.startLine)}-${String(b.endLine)}`,
       };
       return {
         ...base,

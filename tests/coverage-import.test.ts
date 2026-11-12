@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseCoverageSummary as parse } from '../src/coverage-import.js';
+import { omitKey } from './omit-key.js';
 const names = ['lines', 'statements', 'functions', 'branches'] as const;
 const metric = () => ({ total: 4, covered: 3, skipped: 2, pct: 'SECRET' });
 const input = () => ({
@@ -13,12 +14,10 @@ await test('inherited root, metric and numeric fields are not read or accepted',
     { key: 'total', value: {} },
   ];
   for (const name of names) {
-    const summary: Record<string, unknown> = { ...input().total };
-    delete summary[name];
+    const summary = omitKey(input().total, name);
     cases.push({ key: name, value: { total: summary } });
     for (const key of ['total', 'covered', 'skipped']) {
-      const m: Record<string, unknown> = { ...metric() };
-      delete m[key];
+      const m = omitKey(metric(), key);
       cases.push({ key, value: { total: { ...input().total, [name]: m } } });
     }
   }
@@ -123,12 +122,10 @@ await test('runtime type, malformed JSON and required shapes reject', () => {
         read({ total: { ...input().total, [n]: bad } }),
         invalid,
       );
-    const t: Record<string, unknown> = { ...input().total };
-    delete t[n];
+    const t = omitKey(input().total, n);
     assert.deepEqual(read({ total: t }), invalid);
     for (const key of ['total', 'covered', 'skipped']) {
-      const m: Record<string, unknown> = { ...metric() };
-      delete m[key];
+      const m = omitKey(metric(), key);
       assert.deepEqual(read({ total: { ...input().total, [n]: m } }), invalid);
     }
   }

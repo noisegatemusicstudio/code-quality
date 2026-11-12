@@ -27,6 +27,17 @@ export interface QualityManifest {
   workflowRef: string;
   codeQualityRef: string;
   engines: ManifestEngine[];
+  /** New-code measures; null when the CLI computed none. */
+  measures: ManifestMeasure[] | null;
+}
+export interface ManifestMeasure {
+  id: string;
+  state: 'known' | 'unknown';
+  percent: number | null;
+  numerator: number | null;
+  denominator: number | null;
+  /** Fixed reason token when unknown. */
+  reason: string | null;
 }
 
 export class ManifestError extends Error {}
@@ -65,6 +76,14 @@ export function buildManifest(
     results: readonly EngineResult[];
     /** Artifact-relative envelope paths that were actually written. */
     envelopeFiles: ReadonlyMap<string, string>;
+    measures?: readonly {
+      id: string;
+      state: string;
+      percent?: number;
+      numerator?: number;
+      denominator?: number;
+      reason?: string;
+    }[];
   },
 ): QualityManifest {
   if (!sha.test(input.commitSha))
@@ -103,6 +122,16 @@ export function buildManifest(
       exceptedCount: r.excepted ?? 0,
       envelope: input.envelopeFiles.get(r.engine) ?? null,
     })),
+    measures: input.measures
+      ? input.measures.map((m) => ({
+          id: m.id,
+          state: m.state === 'known' ? 'known' : 'unknown',
+          percent: m.percent ?? null,
+          numerator: m.numerator ?? null,
+          denominator: m.denominator ?? null,
+          reason: m.reason ?? null,
+        }))
+      : null,
   };
 }
 

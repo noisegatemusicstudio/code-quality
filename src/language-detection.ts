@@ -27,7 +27,7 @@ const rules: readonly LanguageRule[] = [
     engines: ['eslint', 'semgrep'],
   },
   { language: 'Python', test: ext(/\.pyi?$/), engines: ['ruff'] },
-  { language: 'Java', test: ext(/\.java$/), engines: [] },
+  { language: 'Java', test: ext(/\.java$/), engines: ['pmd', 'checkstyle'] },
   {
     language: 'Kotlin',
     test: ext(/\.kts?$/),
@@ -99,7 +99,7 @@ export function renderLanguages(
     '| --- | ---: | --- |',
     ...languages.map(
       (l) =>
-        `| ${l.language} | ${l.files} | ${l.status === 'covered' ? `analysed by ${l.engines.join(', ')}` : l.status} |`,
+        `| ${l.language} | ${String(l.files)} | ${l.status === 'covered' ? `analysed by ${l.engines.join(', ')}` : l.status} |`,
     ),
     '',
     '"skipped: no engine yet" means no language-specific analysis ran. It is not a clean result.',

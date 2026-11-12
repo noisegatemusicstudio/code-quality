@@ -4,6 +4,7 @@ import {
   isSeverity,
   newFindings,
   normaliseSeverity,
+  unknownText,
   severityLevels,
   type Baseline,
   type Decision,
@@ -29,6 +30,9 @@ export interface QualityGate {
 export interface GateMeasures {
   newCodeCoveragePercent: number | null;
   newCodeDuplicationPercent: number | null;
+  /** Why a measure is unknown; shown when `onUnknown` is `fail`. */
+  newCodeCoverageUnknown?: string;
+  newCodeDuplicationUnknown?: string;
 }
 export const noMeasures: GateMeasures = {
   newCodeCoveragePercent: null,
@@ -193,11 +197,11 @@ export function decideWithGate(
   }
   if (blocking)
     reasons.push(
-      `${blocking} new finding(s) at or above ${gate.newIssues.failOnSeverity}`,
+      `${String(blocking)} new finding(s) at or above ${gate.newIssues.failOnSeverity}`,
     );
   if (secrets > gate.secrets.maxFindings)
     reasons.push(
-      `${secrets} secret finding(s), allowed ${gate.secrets.maxFindings}`,
+      `${String(secrets)} secret finding(s), allowed ${String(gate.secrets.maxFindings)}`,
     );
   const measure = (
     label: string,
@@ -205,24 +209,29 @@ export function decideWithGate(
     ok: (n: number) => boolean,
     rule: string,
     unknown: OnUnknown,
+    why?: string,
   ): void => {
     if (value === null) {
-      if (unknown === 'fail') reasons.push(`${label} not measured`);
-    } else if (!ok(value)) reasons.push(`${label} ${value}%, required ${rule}`);
+      if (unknown === 'fail')
+        reasons.push(`${label} not measured${why ? ` (${why})` : ''}`);
+    } else if (!ok(value))
+      reasons.push(`${label} ${String(value)}%, required ${rule}`);
   };
   measure(
     'new-code coverage',
     measures.newCodeCoveragePercent,
     (n) => n >= gate.newCodeCoverage.minPercent,
-    `>= ${gate.newCodeCoverage.minPercent}%`,
+    `>= ${String(gate.newCodeCoverage.minPercent)}%`,
     gate.newCodeCoverage.onUnknown,
+    measures.newCodeCoverageUnknown,
   );
   measure(
     'new-code duplication',
     measures.newCodeDuplicationPercent,
     (n) => n <= gate.newCodeDuplication.maxPercent,
-    `<= ${gate.newCodeDuplication.maxPercent}%`,
+    `<= ${String(gate.newCodeDuplication.maxPercent)}%`,
     gate.newCodeDuplication.onUnknown,
+    measures.newCodeDuplicationUnknown,
   );
   const wouldFail = reasons.length > 0;
   return {
@@ -234,5 +243,31 @@ export function decideWithGate(
     exitCode: options.enforce && wouldFail ? 1 : 0,
     reasons,
     gate: { name: gate.name, version: gate.version },
+  };
+}
+
+/** Reduce the new-code measures to what the gate evaluates (lines coverage, duplication). */
+export function gateMeasuresFrom(
+  measures: readonly {
+    id: string;
+    scope: string;
+    state: string;
+    percent?: number;
+    reason?: string;
+  }[],
+): GateMeasures {
+  const pick = (id: string) =>
+    measures.find((m) => m.id === id && m.scope === 'new-code');
+  const coverage = pick('coverage.lines');
+  const duplication = pick('duplication.lines');
+  const value = (m: ReturnType<typeof pick>): number | null =>
+    m?.state === 'known' && m.percent !== undefined
+      ? Math.round(m.percent * 100) / 100
+      : null;
+  return {
+    newCodeCoveragePercent: value(coverage),
+    newCodeDuplicationPercent: value(duplication),
+    newCodeCoverageUnknown: unknownText(coverage?.reason ?? 'no-report'),
+    newCodeDuplicationUnknown: unknownText(duplication?.reason ?? 'no-report'),
   };
 }

@@ -1,9 +1,8 @@
-/*
-Test classification: integration
-Review status: Not Reviewed
-Evidence: synthetic
-Scope: Runs the committed-source scan against synthetic git fixtures and checks external report acceptance; does not run the real pinned Gitleaks, jscpd or OSV-Scanner binaries.
-*/
+// Test classification: integration
+// Review status: Not Reviewed
+// Evidence: synthetic
+// Scope: scanner pipeline pieces against synthetic Git fixtures and real tools; not a hosted-service path.
+import { requireSupportedGit } from './git-requirement.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync, spawnSync } from 'node:child_process';
@@ -42,7 +41,7 @@ const allInstalled = (
 async function fixture() {
   const directory = await mkdtemp(join(tmpdir(), 'integrated-scanner-'));
   const git = (...args: string[]) =>
-    execFileSync('/usr/bin/git', args, {
+    execFileSync(requireSupportedGit(), args, {
       cwd: directory,
       encoding: 'utf8',
       env: {
@@ -94,7 +93,7 @@ async function fixture() {
     git,
     commit,
     options: {
-      gitExecutable: '/usr/bin/git',
+      gitExecutable: requireSupportedGit(),
       gitDirectory: join(directory, '.git'),
       commitSha,
     },

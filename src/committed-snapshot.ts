@@ -35,6 +35,12 @@ export class SnapshotError extends Error {
     );
   }
 }
+/** Oldest Git generation the committed-snapshot isolation has been verified on. */
+export const MINIMUM_GIT_VERSION = '2.47';
+export function isSupportedGitVersion(output: string): boolean {
+  return /^git version 2\.(?:4[7-9]|[5-9][0-9])\.\d+\n$/.test(output);
+}
+
 /** Scans the immutable committed tree ONLY, not the checkout (dirty or clean).
  * The caller explicitly trusts its Git executable and object database directory.
  * No status/diff/archive, checkout, filters, project config or working-tree reads.
@@ -206,8 +212,7 @@ export async function createCommittedSnapshot(options: {
     };
     const version = (await git(['--version'], 128)).toString();
     // GIT_NO_LAZY_FETCH is supported by this tested Git generation.
-    if (!/^git version 2\.(?:4[7-9]|[5-9][0-9])\.\d+\n$/.test(version))
-      throw fail();
+    if (!isSupportedGitVersion(version)) throw fail();
     await git(
       [
         'fsck',

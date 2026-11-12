@@ -1,0 +1,25 @@
+# Copyright (c) 2026 ReleaseReady. All rights reserved.
+# ReleaseReady-authored Semgrep rule (RRDSCRUM-133). Written from scratch; not
+# copied or derived from the Semgrep Registry or any other third-party rule set.
+# Ruleset version: 2026.11.1
+rules:
+  - id: releaseready.js.dynamic-require
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: A module is loaded from a non-literal path. Review that the path cannot be influenced by untrusted input.
+    patterns:
+      - pattern-either:
+          - pattern: require($PATH)
+          - pattern: import($PATH)
+      - pattern-not: 'require("...")'
+      - pattern-not: 'import("...")'
+    metadata:
+      category: security
+      cwe: 'CWE-829: Inclusion of Functionality from Untrusted Control Sphere'
+      confidence: LOW
+      finding-type: hotspot
+      remediation: 'Load modules from a fixed allowlist of literal paths.'
+      author: ReleaseReady
+      license: 'Proprietary, all rights reserved (ReleaseReady-authored)'
+      version: '1'
+      ruleset-version: '2026.11.1'

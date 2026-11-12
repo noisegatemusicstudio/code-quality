@@ -58,7 +58,7 @@ export interface OsvAffectedRange {
 export interface DependencyFinding {
   /** Repository-relative lockfile or SBOM path. */
   artefactPath: string;
-  artefactKind: OsvArtefactKind;
+  artefactKind: OsvArtefactKind | 'image';
   package: { name: string; version: string; ecosystem: string };
   advisory: {
     /** Primary identifier (GHSA preferred, then CVE, then the rest). */

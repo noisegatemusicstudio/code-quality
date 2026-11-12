@@ -11,6 +11,7 @@
     "src/osv-schema-LICENSE.txt",
     "src/osv-schema-NOTICE.txt",
     "README.md",
+    "rules/semgrep",
     "hooks/pre-commit",
     "quality.ignore"
   ],
@@ -28,6 +29,9 @@
     "./scanner-adapter": "./dist/src/scanner-adapter.js",
     "./gitleaks-adapter": "./dist/src/gitleaks-adapter.js",
     "./osv-adapter": "./dist/src/osv-adapter.js",
+    "./trivy-adapter": "./dist/src/trivy-adapter.js",
+    "./dependency-correlation": "./dist/src/dependency-correlation.js",
+    "./semgrep-adapter": "./dist/src/semgrep-adapter.js",
     "./quality-measures": "./dist/src/quality-measures.js",
     "./coverage-detail": "./dist/src/coverage-detail.js",
     "./duplication": "./dist/src/duplication.js",
@@ -65,7 +69,8 @@
   },
   "devDependencies": {
     "@types/node": "22.20.5",
-    "@types/yauzl": "3.4.0"
+    "@types/yauzl": "3.4.0",
+    "yaml": "2.9.1"
   },
   "overrides": {
     "eslint": {

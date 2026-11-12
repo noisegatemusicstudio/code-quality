@@ -472,7 +472,7 @@ package's scanners on a pull request: ESLint (bundled rules), Gitleaks, Trivy
 registry rules), jscpd and OSV, plus ShellCheck and shfmt (`-d`, never rewrites)
 for shell scripts, Prettier (`--check` semantics, see below), actionlint and zizmor (`--offline`) for workflows, hadolint
 (Dockerfiles), tflint (Terraform, bundled ruleset only, no plugin downloads),
-yamllint and markdownlint-cli2, Ruff (Python) and detekt plus ktlint (Kotlin),
+yamllint and markdownlint-cli2, Ruff (Python), detekt plus ktlint (Kotlin) and SwiftLint (Swift),
 all with bundled default configs (project
 configs are never applied). Every engine is downloaded at the version and
 sha256 pinned in `src/scanner-pins.ts` and refused on mismatch; Semgrep is
@@ -486,6 +486,24 @@ installs one. Without a runtime both engines
 are reported `skipped: needs a Java runtime`, never clean, and they only run
 when the repository has tracked `.kt` or `.kts` files. They read no project
 configuration (`detekt.yml`, `.editorconfig`), apply no plugins and never format.
+
+**Swift** (only when the repository has tracked `.swift` files; otherwise the
+engine is skipped as not applicable and, because `install --repo` checks first,
+the binary is not even downloaded): SwiftLint 0.65.1, the official static Linux
+build pinned by sha256, so no Swift toolchain and no macOS runner are needed. It
+runs `swiftlint lint --reporter json --quiet --no-cache` over the Swift sources
+with the default rules. The repository's root `.swiftlint.yml` is honoured only
+when it is plain YAML data: a SwiftLint configuration is never code, and the scan
+refuses one that is over 64 KiB, has control characters or YAML tags, or points
+at another configuration (`parent_config`, `child_config`, any URL). A refused
+configuration is replaced by the bundled one and the engine is reported
+`incomplete` with the reason, never clean. Nested `.swiftlint.yml` files are not
+read. `swift build` and `swiftlint analyze` (analyzer rules, which need a
+compiler log) are never run; `swiftlint-analyze` is reported
+`skipped: requires compiled sources`. If the binary cannot start on the host
+(for example a glibc mismatch) SwiftLint is reported `failed` with that reason,
+never a pass. Findings map `error` to high and `warning` to medium.
+
 The job needs `contents: read` and no secrets.
 
 **Prettier** (only when the repository tracks TS/JS, JSON, YAML, Markdown or CSS
@@ -608,7 +626,7 @@ guessed. Fields (`schemaVersion` 1):
 | `engines[]`           | list                     | one entry per engine, below                                           |
 
 Each `engines[]` entry: `id` (`eslint`, `gitleaks`, `osv`, `trivy`, `semgrep`,
-`jscpd`, `ruff`, `mypy`, `detekt`, `ktlint`, `hadolint`, `tflint`, `yamllint`,
+`jscpd`, `ruff`, `mypy`, `detekt`, `ktlint`, `swiftlint`, `swiftlint-analyze`, `hadolint`, `tflint`, `yamllint`,
 `markdownlint`), `version` (string or `null`), `status` (`completed`, `incomplete`,
 `failed` or `skipped`), `reason` (string or `null`), `findingCount` (after
 exceptions), `exceptedCount`, and `envelope` (artifact-relative path or `null`).

@@ -25,6 +25,8 @@ export const engineIds = [
   'spotbugs',
   'detekt',
   'ktlint',
+  'swiftlint',
+  'swiftlint-analyze',
   'shellcheck',
   'shfmt',
   'actionlint',
@@ -163,6 +165,10 @@ export function detectApplicability(
     spotbugs: some((p) => isJavaFile(p)) ? yes : no('no Java files'),
     detekt: some((p) => kotlinExtension.test(p)) ? yes : no('no Kotlin files'),
     ktlint: some((p) => kotlinExtension.test(p)) ? yes : no('no Kotlin files'),
+    swiftlint: some((p) => p.endsWith('.swift')) ? yes : no('no Swift files'),
+    'swiftlint-analyze': some((p) => p.endsWith('.swift'))
+      ? yes
+      : no('no Swift files'),
     shellcheck: some((p) => shellFile.test(p)) ? yes : no('no shell scripts'),
     shfmt: some((p) => shellFile.test(p)) ? yes : no('no shell scripts'),
     actionlint: some((p) => workflowFile.test(p))
@@ -233,6 +239,14 @@ export function normaliseSeverity(
       note: 'low',
     };
     return detekt[label] ?? 'high';
+  }
+  if (engine === 'swiftlint') {
+    // SwiftLint's own two levels, lower-cased by the parser.
+    const swiftlint: Record<string, Severity> = {
+      error: 'high',
+      warning: 'medium',
+    };
+    return swiftlint[label] ?? 'high';
   }
   // ktlint has no severity; every violation is a style finding.
   if (engine === 'ktlint') return label === 'style' ? 'low' : 'high';

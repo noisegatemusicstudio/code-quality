@@ -30,6 +30,7 @@ import {
   type ExceptionLoad,
   installEngine,
   installableEngines,
+  installOnDemand,
   runEngines,
   scopeFromEnvironment,
   trackedPaths,
@@ -68,7 +69,19 @@ async function install(args: string[]): Promise<number> {
     tools: Record<string, string>;
     errors: Record<string, string>;
   } = { tools: {}, errors: {} };
+  // With --repo, engines in `installOnDemand` download only when the checkout
+  // has files they scan; without it they install like every other engine.
+  const repoOption = option(args, 'repo');
+  const tracked =
+    repoOption === undefined
+      ? undefined
+      : await trackedPaths(resolve(repoOption));
   for (const id of installableEngines.filter((e) => selected.includes(e))) {
+    const wanted = installOnDemand[id];
+    if (wanted && tracked && !tracked.some(wanted)) {
+      process.stdout.write(`skipped ${id}: nothing to scan\n`);
+      continue;
+    }
     try {
       record.tools[id] = await installEngine(id, dir);
       process.stdout.write(`installed ${id}\n`);

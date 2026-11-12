@@ -1,15 +1,6 @@
-import {
-  type AdapterEnvelope,
-  type AdapterFinding,
-  type EnvelopeReason,
-  type EnvelopeScope,
-  envelopeLimits,
-  isSafeRelativePath,
-  redactMessage,
-} from './adapter-envelope.js';
-import { assembleFindings } from './finding-assembly.js';
+import type { AdapterEnvelope, EnvelopeScope } from './adapter-envelope.js';
+import { type Draft, assembleDrafts } from './finding-assembly.js';
 import { javaRuntime } from './java-runtime.js';
-import { relativeSourcePath } from './source-paths.js';
 import {
   type ParsedOutput,
   type ScannerAdapter,
@@ -35,81 +26,6 @@ export const javaSkipReason =
 const jarBytes = 128 * 1024 * 1024;
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
-const position = (v: unknown): number | undefined =>
-  typeof v === 'number' &&
-  Number.isSafeInteger(v) &&
-  v >= 1 &&
-  v <= envelopeLimits.maxLine
-    ? v
-    : undefined;
-const ruleOk = /^[A-Za-z0-9@/._:()-]{1,200}$/;
-const levelOk = /^[A-Za-z0-9._-]{1,32}$/;
-
-interface Draft {
-  ruleId: unknown;
-  severity: unknown;
-  path: unknown;
-  line: unknown;
-  column: unknown;
-  endLine?: unknown;
-  endColumn?: unknown;
-  message: unknown;
-}
-
-/** Validate one raw entry; `undefined` means unusable (the run becomes incomplete). */
-function toCandidate(
-  d: Draft,
-  sourceRoot: string | undefined,
-): Omit<AdapterFinding, 'fingerprint'> | undefined {
-  const path =
-    typeof d.path === 'string'
-      ? relativeSourcePath(
-          d.path.startsWith('file://') ? d.path.slice(7) : d.path,
-          sourceRoot,
-        )
-      : undefined;
-  const startLine = position(d.line);
-  const startColumn = position(d.column) ?? 1;
-  const endLine = position(d.endLine) ?? startLine;
-  const endColumn = position(d.endColumn) ?? startColumn;
-  if (
-    typeof d.ruleId !== 'string' ||
-    !ruleOk.test(d.ruleId) ||
-    typeof d.severity !== 'string' ||
-    !levelOk.test(d.severity) ||
-    !isSafeRelativePath(path) ||
-    startLine === undefined ||
-    endLine === undefined ||
-    endLine < startLine
-  )
-    return undefined;
-  return {
-    ruleId: d.ruleId,
-    nativeSeverity: d.severity,
-    path,
-    range: { startLine, startColumn, endLine, endColumn },
-    message: redactMessage(d.message) || d.ruleId,
-  };
-}
-
-function assemble(
-  engine: string,
-  drafts: readonly Draft[],
-  sourceRoot: string | undefined,
-  invalid: boolean,
-): ParsedOutput {
-  let partial: EnvelopeReason | undefined = invalid
-    ? 'invalid-output'
-    : undefined;
-  const candidates: Omit<AdapterFinding, 'fingerprint'>[] = [];
-  for (const draft of drafts) {
-    const candidate = toCandidate(draft, sourceRoot);
-    if (candidate) candidates.push(candidate);
-    else partial ??= 'invalid-output';
-  }
-  return assembleFindings(engine, candidates, partial);
-}
-
 /**
  * detekt SARIF 2.1.0: `runs[].results[]` with `ruleId`, `level`
  * (`error`|`warning`|`note`), `message.text` and one physical location. The
@@ -155,7 +71,7 @@ export function parseDetektSarif(
       });
     }
   }
-  return assemble('detekt', drafts, sourceRoot, invalid);
+  return assembleDrafts('detekt', drafts, sourceRoot, invalid);
 }
 
 /**
@@ -191,7 +107,7 @@ export function parseKtlintReport(
       });
     }
   }
-  return assemble('ktlint', drafts, sourceRoot, invalid);
+  return assembleDrafts('ktlint', drafts, sourceRoot, invalid);
 }
 
 interface JarSpec {

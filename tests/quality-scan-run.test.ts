@@ -34,6 +34,7 @@ import {
   releaseAssets,
   detektPin,
   ktlintPin,
+  swiftlintPin,
   ruffPin,
   semgrepPin,
   trivyPin,
@@ -56,6 +57,7 @@ await test('install refuses an asset whose sha256 differs from the pin and write
       'checkstyle',
       'detekt',
       'ktlint',
+      'swiftlint',
     ] as const) {
       await assert.rejects(
         installEngine(id, join(dir, id), () =>
@@ -84,6 +86,8 @@ await test('release assets agree with the engine pins and upstream versions', ()
   assert.ok(releaseAssets.detekt.url.includes(`v${detektPin.version}/`));
   assert.equal(releaseAssets.ktlint.binarySha256, ktlintPin.sha256);
   assert.ok(releaseAssets.ktlint.url.includes(`/${ktlintPin.version}/`));
+  assert.equal(releaseAssets.swiftlint.binarySha256, swiftlintPin.sha256);
+  assert.ok(releaseAssets.swiftlint.url.includes(`/${swiftlintPin.version}/`));
   assert.equal(trivyPin.version, trivyAdapterEngine.version);
   assert.equal(semgrepPin.version, semgrepVersion);
   for (const [id, asset] of Object.entries(releaseAssets)) {

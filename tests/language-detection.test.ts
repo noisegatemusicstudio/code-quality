@@ -62,9 +62,29 @@ await test('Swift is covered by SwiftLint, not skipped', () => {
 await test('covered languages name their engines', () => {
   const byName = new Map(detectLanguages(paths).map((l) => [l.language, l]));
   assert.equal(byName.get('TypeScript')?.status, 'covered');
-  assert.deepEqual(byName.get('TypeScript')?.engines, ['eslint', 'semgrep']);
+  assert.deepEqual(byName.get('TypeScript')?.engines, [
+    'eslint',
+    'prettier',
+    'semgrep',
+  ]);
   for (const name of ['Terraform', 'Dockerfile', 'YAML', 'Markdown'])
     assert.equal(byName.get(name)?.status, 'covered', name);
+});
+
+await test('JSON and CSS are covered by Prettier alone, and Prettier is listed for YAML and Markdown', () => {
+  const byName = new Map(
+    detectLanguages(['a.json', 'b.css', 'c.yml', 'd.md']).map((l) => [
+      l.language,
+      l,
+    ]),
+  );
+  assert.deepEqual(byName.get('JSON')?.engines, ['prettier']);
+  assert.deepEqual(byName.get('CSS')?.engines, ['prettier']);
+  assert.deepEqual(byName.get('YAML')?.engines, ['prettier', 'yamllint']);
+  assert.deepEqual(byName.get('Markdown')?.engines, [
+    'prettier',
+    'markdownlint',
+  ]);
 });
 
 await test('Shell and GitHub Actions workflows count as covered', () => {
@@ -92,7 +112,10 @@ await test('the summary shows unsupported languages explicitly', async () => {
     languages,
   });
   assert.match(summary, /\| Python \| 1 \| analysed by ruff \|/);
-  assert.match(summary, /\| TypeScript \| 1 \| analysed by eslint, semgrep \|/);
+  assert.match(
+    summary,
+    /\| TypeScript \| 1 \| analysed by eslint, prettier, semgrep \|/,
+  );
   assert.match(summary, /not a clean result/);
   assert.deepEqual(renderLanguages([]), []);
 });

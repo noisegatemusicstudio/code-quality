@@ -222,7 +222,7 @@ await test('reusable workflow: workflow_call, read-only permissions, no secrets,
   );
   assert.match(text, /^on:\n {2}workflow_call:/m);
   assert.match(text, /^permissions:\n {2}contents: read\n/m);
-  assert.equal(/secrets\./.test(text), false);
+  assert.equal(text.includes('secrets.'), false);
   assert.equal(/^\s+secrets:/m.test(text), false);
   assert.equal(/\bwrite\b/.test(text.replace(/--write/g, '')), false);
   for (const input of [
@@ -254,7 +254,7 @@ await test('dogfood workflow calls the reusable one in advisory mode on every pu
     'utf8',
   );
   assert.match(text, /^on:\n {2}push:\n {2}pull_request:\n/m);
-  assert.equal(/branches:/.test(text), false);
+  assert.equal(text.includes('branches:'), false);
   assert.match(text, /uses: \.\/\.github\/workflows\/quality-scan\.yml/);
   assert.match(text, /enforce: false/);
   assert.match(text, /code-quality-ref: \$\{\{ github\.sha \}\}/);

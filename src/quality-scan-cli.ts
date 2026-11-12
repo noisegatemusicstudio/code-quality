@@ -4,7 +4,6 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import {
   buildReport,
-  decide,
   isSeverity,
   parseBaseline,
   parseOsvMode,
@@ -13,6 +12,8 @@ import {
   type EngineResult,
 } from './quality-scan.js';
 import { buildManifest, ManifestError } from './quality-manifest.js';
+import { detectLanguages } from './language-detection.js';
+import { loadGate, decideWithGate } from './quality-gate.js';
 import {
   applyGitleaksExceptions,
   ExceptionSourceError,
@@ -22,6 +23,7 @@ import {
   installableEngines,
   runEngines,
   scopeFromEnvironment,
+  trackedPaths,
 } from './quality-scan-run.js';
 
 const exec = promisify(execFile);
@@ -75,10 +77,13 @@ async function run(args: string[]): Promise<number> {
   const repo = resolve(option(args, 'repo') ?? '.');
   const out = resolve(option(args, 'out') ?? 'quality-scan');
   const { selected, unknown } = parseScanners(option(args, 'scanners') ?? '');
-  const failOn = option(args, 'fail-on-severity') ?? 'high';
-  if (unknown.length || !isSeverity(failOn)) {
+  const failOnOption = option(args, 'fail-on-severity');
+  if (
+    unknown.length ||
+    (failOnOption !== undefined && !isSeverity(failOnOption))
+  ) {
     process.stderr.write(
-      `invalid input: ${unknown.length ? `unknown scanners ${unknown.join(', ')}` : `fail-on-severity ${failOn}`}\n`,
+      `invalid input: ${unknown.length ? `unknown scanners ${unknown.join(', ')}` : `fail-on-severity ${failOnOption}`}\n`,
     );
     return 2;
   }
@@ -193,15 +198,27 @@ async function run(args: string[]): Promise<number> {
       baseline = null;
     }
   }
-  const decision = decide(results, {
-    enforce,
-    failOnSeverity: failOn,
-  });
+  // The versioned gate file is the policy; an explicit --fail-on-severity only
+  // overrides its new-issue threshold.
+  let gate;
+  try {
+    gate = await loadGate(option(args, 'gate'));
+  } catch (error) {
+    process.stderr.write(
+      `${error instanceof Error ? error.message : 'quality gate unreadable'}\n`,
+    );
+    return 2;
+  }
+  if (failOnOption !== undefined && isSeverity(failOnOption))
+    gate = { ...gate, newIssues: { failOnSeverity: failOnOption } };
+  const languages = detectLanguages(await trackedPaths(repo));
+  const decision = decideWithGate(results, { enforce, gate, baseline });
   const summary = renderSummary({
     commitSha,
     results,
     decision,
     baseline,
+    languages,
     exceptions: loaded,
   });
   await mkdir(join(out, 'envelopes'), { recursive: true });
@@ -213,6 +230,7 @@ async function run(args: string[]): Promise<number> {
         repository: process.env.GITHUB_REPOSITORY ?? 'local',
         results,
         decision,
+        languages,
       }),
       null,
       2,

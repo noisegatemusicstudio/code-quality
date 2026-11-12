@@ -306,7 +306,7 @@ export function parseTrivyReport(
           path: target,
           range: { startLine, startColumn: 1, endLine, endColumn: 1 },
           message: redactMessage(
-            `${optText(m.Message, 400) ?? optText(m.Title, 400) ?? ruleId}` +
+            (optText(m.Message, 400) ?? optText(m.Title, 400) ?? ruleId) +
               (resource ? ` [${resource}]` : '') +
               (resolution ? ` Remediation: ${resolution}` : ''),
           ),

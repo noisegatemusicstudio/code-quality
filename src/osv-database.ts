@@ -154,7 +154,7 @@ function validateEntry(entry: Entry, names: Set<string>): void {
     name.length > 512 ||
     !name.endsWith('.json') ||
     /[\\:]/.test(name) ||
-    [...name].some(
+    Array.from(name).some(
       (character) =>
         character.charCodeAt(0) < 32 || character.charCodeAt(0) === 127,
     ) ||
@@ -230,7 +230,9 @@ class FileReader extends RandomAccessReader {
         bytes.copy(buffer, offset);
         callback(null);
       },
-      () => callback(new Error('Invalid offline OSV archive read')),
+      () => {
+        callback(new Error('Invalid offline OSV archive read'));
+      },
     );
   }
   // RandomAccessReader.close is a no-op. Only the caller closes its FileHandle.

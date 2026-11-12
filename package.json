@@ -12,6 +12,7 @@
     "src/osv-schema-NOTICE.txt",
     "README.md",
     "rules/semgrep",
+    "gates",
     "hooks/pre-commit",
     "quality.ignore"
   ],
@@ -36,7 +37,9 @@
     "./coverage-detail": "./dist/src/coverage-detail.js",
     "./duplication": "./dist/src/duplication.js",
     "./eslint-adapter": "./dist/src/eslint-adapter.js",
-    "./finding-compare": "./dist/src/finding-compare.js"
+    "./finding-compare": "./dist/src/finding-compare.js",
+    "./quality-gate": "./dist/src/quality-gate.js",
+    "./language-detection": "./dist/src/language-detection.js"
   },
   "scripts": {
     "build": "tsc && node dist/src/build-assets.js",

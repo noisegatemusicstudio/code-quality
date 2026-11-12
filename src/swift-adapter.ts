@@ -24,6 +24,8 @@ export const bundledSwiftConfig =
   '# Bundled by code-quality: SwiftLint default rules, no opt-in or analyzer rules.\ndisabled_rules: []\n';
 export const swiftlintUnrunnableReason =
   'swiftlint could not run on this host (the binary did not start or did not report the pinned version, for example a glibc mismatch): engine-version-mismatch';
+// One line: optional indent and dash, then the key and its colon. Anchored and linear.
+const otherConfigKey = /^[ \t-]*(?:parent_config|child_config)[ \t]*:/;
 const maxConfigBytes = 65536;
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
@@ -45,7 +47,7 @@ export function swiftConfigProblem(text: string): string | undefined {
     if ((code < 32 && !allowed) || code === 127)
       return 'contains control characters';
   }
-  if (/^\s*-?\s*(?:parent_config|child_config)\s*:/m.test(text))
+  if (text.split('\n').some((line) => otherConfigKey.test(line)))
     return 'refers to another configuration (parent_config or child_config)';
   if (text.includes('://')) return 'contains a URL';
   if (/(?:^|[\s:[{,-])![A-Za-z!<]/m.test(text)) return 'contains a YAML tag';

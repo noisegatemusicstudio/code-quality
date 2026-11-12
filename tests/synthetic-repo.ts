@@ -8,6 +8,7 @@ import { execFileSync } from 'node:child_process';
 import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { systemGit } from '../src/system-git.js';
 
 /** Create a temp repository whose single commit holds `name` with `content`. */
 export async function commitRepo(
@@ -17,7 +18,9 @@ export async function commitRepo(
 ): Promise<string> {
   const repo = await mkdtemp(join(tmpdir(), prefix));
   const git = (...args: string[]) =>
-    execFileSync('git', ['-C', repo, ...args], { stdio: 'pipe' });
+    execFileSync(systemGit(process.platform), ['-C', repo, ...args], {
+      stdio: 'pipe',
+    });
   git('init', '-q');
   await writeFile(join(repo, name), content);
   git('add', '.');

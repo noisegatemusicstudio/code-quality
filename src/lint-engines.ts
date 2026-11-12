@@ -217,7 +217,7 @@ export function parseZizmorReport(stdout: string): ParsedOutput | undefined {
     const determinations = isRecord(item.determinations)
       ? item.determinations
       : {};
-    const path = cleanPath(local?.given_path);
+    const path = cleanPath(local?.verbatim_path ?? local?.given_path);
     const row = (p: Record<string, unknown> | undefined): number | undefined =>
       typeof p?.row === 'number' ? positive(p.row + 1) : undefined;
     const col = (p: Record<string, unknown> | undefined): number =>

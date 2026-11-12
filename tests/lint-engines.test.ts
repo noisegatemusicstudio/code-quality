@@ -103,7 +103,7 @@ const zizmorBad = JSON.stringify([
       {
         symbolic: {
           key: {
-            Local: { prefix: '.', given_path: '.github/workflows/bad.yml' },
+            Local: { verbatim_path: './.github/workflows/bad.yml' },
           },
           kind: 'Primary',
         },

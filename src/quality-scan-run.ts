@@ -25,12 +25,20 @@ import {
   type EngineId,
   type EngineResult,
   type OsvMode,
+  engineIds,
   detectApplicability,
 } from './quality-scan.js';
 import {
   type GitleaksException,
   classifyGitleaksEnvelope,
 } from './gitleaks-adapter.js';
+import {
+  type LintEngineId,
+  lintAdapter,
+  lintEngines,
+  pinnedVersionOutput,
+  planBatches,
+} from './lint-engines.js';
 import { osvLockfileNames, runOsvScan } from './osv-adapter.js';
 import {
   hadolintAdapter,
@@ -48,6 +56,7 @@ import {
   externalPins,
   hadolintPin,
   markdownlintPin,
+  lintPins,
   osvPin,
   releaseAssets,
   tflintPin,
@@ -85,12 +94,16 @@ export const defaultDownloader: Downloader = async (url) => {
 };
 
 export type InstallableEngine =
-  'gitleaks' | 'trivy' | 'osv' | 'jscpd' | 'hadolint' | 'tflint';
+  'gitleaks' | 'trivy' | 'osv' | 'jscpd' | 'hadolint' | 'tflint' | LintEngineId;
 export const installableEngines: readonly InstallableEngine[] = [
   'gitleaks',
   'trivy',
   'osv',
   'jscpd',
+  'shellcheck',
+  'shfmt',
+  'actionlint',
+  'zizmor',
   'hadolint',
   'tflint',
 ];
@@ -117,7 +130,7 @@ export async function installEngine(
       const archive = join(work, zip ? 'asset.zip' : 'asset.tgz');
       await writeFile(archive, bytes, { flag: 'wx' });
       if (zip) await exec('unzip', ['-q', archive, asset.member, '-d', work]);
-      else await exec('tar', ['-xzf', archive, '-C', work, asset.member]);
+      else await exec('tar', ['-xf', archive, '-C', work, asset.member]);
       const extracted = join(work, asset.member);
       const info = await lstat(extracted);
       if (!info.isFile() || info.size > maxAssetBytes)
@@ -596,6 +609,54 @@ export async function loadExceptions(input: {
   };
 }
 
+/**
+ * Run one file-list lint engine (ShellCheck, shfmt, actionlint, zizmor) in
+ * batches the adapter's argument limit allows. Files that cannot be passed
+ * (unreadable, over limits, unusable name) make the result incomplete.
+ */
+async function runLintEngine(
+  id: LintEngineId,
+  options: RunOptions,
+  paths: readonly string[],
+): Promise<EngineResult> {
+  const spec = lintEngines[id];
+  const executable = options.tools[id];
+  if (
+    !executable ||
+    !(await executableMatches(executable, lintPins[id].sha256))
+  )
+    return failed(
+      id,
+      options.installErrors[id] ?? `${id} missing or sha256 mismatch`,
+    );
+  const { files, omitted, causes } = await readBoundedFiles(
+    options.repo,
+    paths,
+    spec.matches,
+  );
+  const { batches, unusable } = planBatches(Object.keys(files));
+  const versionOutput = await pinnedVersionOutput(
+    executable,
+    spec.versionArgs,
+    lintPins[id].version,
+  );
+  const envelopes: AdapterEnvelope[] = [];
+  for (const batch of batches)
+    envelopes.push(
+      await runAdapter(lintAdapter(spec, executable, versionOutput, batch), {
+        scope: options.scope,
+        files: Object.fromEntries(batch.map((p) => [p, files[p] ?? ''])),
+        args: batch,
+      }),
+    );
+  if (!envelopes.length && !unusable.length && !omitted)
+    return failed(id, 'no files to scan');
+  const base = envelopes.length
+    ? fromEnvelope(id, mergeEnvelopes(envelopes), lintPins[id].version)
+    : failed(id, 'no file could be passed to the engine');
+  return applyOmitted(base, omitted + unusable.length, causes);
+}
+
 /** Run every selected engine against the checked-out commit. Never throws. */
 export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
   const paths = await trackedPaths(options.repo);
@@ -894,6 +955,9 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     return disclosure ? { ...result, disclosure } : result;
   });
 
+  for (const id of Object.keys(lintEngines) as LintEngineId[])
+    await guard(id, () => runLintEngine(id, options, paths));
+
   // gitleaks and jscpd run through the committed-snapshot API.
   const snapshotEngines = (['gitleaks', 'jscpd'] as const).filter(todo);
   if (snapshotEngines.length) {
@@ -944,18 +1008,5 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
         out.set(id, failed(id, 'committed-snapshot scan threw unexpectedly'));
     }
   }
-  return (
-    [
-      'eslint',
-      'gitleaks',
-      'osv',
-      'trivy',
-      'semgrep',
-      'jscpd',
-      'hadolint',
-      'tflint',
-      'yamllint',
-      'markdownlint',
-    ] as const
-  ).map((id) => out.get(id) ?? failed(id, 'no result'));
+  return engineIds.map((id) => out.get(id) ?? failed(id, 'no result'));
 }

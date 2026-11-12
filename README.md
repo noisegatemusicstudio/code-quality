@@ -469,9 +469,11 @@ Licence, redistribution and hosted-use review of candidate scanners (RRDSCRUM-61
 `.github/workflows/quality-scan.yml` is a reusable workflow that runs this
 package's scanners on a pull request: ESLint (bundled rules), Gitleaks, Trivy
 (filesystem IaC checks), Semgrep (ReleaseReady rules in `rules/semgrep` only, no
-registry rules), jscpd and OSV, plus hadolint (Dockerfiles), tflint (Terraform,
-bundled ruleset only, no plugin downloads), yamllint and markdownlint-cli2, all
-with bundled default configs (project configs are never applied). Every engine is downloaded at the version and
+registry rules), jscpd and OSV, plus ShellCheck and shfmt (`-d`, never rewrites)
+for shell scripts, actionlint and zizmor (`--offline`) for workflows, hadolint
+(Dockerfiles), tflint (Terraform, bundled ruleset only, no plugin downloads),
+yamllint and markdownlint-cli2, all with bundled default configs (project
+configs are never applied). Every engine is downloaded at the version and
 sha256 pinned in `src/scanner-pins.ts` and refused on mismatch; Semgrep is
 installed with `pip --require-hashes` from `scanners/semgrep-requirements.txt`
 (yamllint likewise from `scanners/yamllint-requirements.txt`); markdownlint-cli2

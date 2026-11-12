@@ -13,7 +13,7 @@ on:
         type: string
         default: 22.23.4
       scanners:
-        description: 'Comma list of eslint, gitleaks, osv, trivy, semgrep, jscpd, hadolint, tflint, yamllint, markdownlint, or all (applicable engines only).'
+        description: 'Comma list of eslint, gitleaks, osv, trivy, semgrep, jscpd, shellcheck, shfmt, actionlint, zizmor, hadolint, tflint, yamllint, markdownlint, or all (applicable engines only).'
         type: string
         default: all
       code-quality-ref:

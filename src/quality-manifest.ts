@@ -51,16 +51,143 @@ const workflowRef =
 const counter = /^[1-9]\d{0,14}$/;
 const reasonLimit = 500;
 
+const localWorkflowRef = 'local:releaseready-dev';
+const localWorkflowPattern = /^local:releaseready-dev$/;
+
 const need = (
-  environment: Record<string, string | undefined>,
-  name: string,
+  label: string,
+  value: string | undefined,
   pattern: RegExp,
 ): string => {
-  const value = environment[name];
   if (value === undefined || hasControl(value) || !pattern.test(value))
-    throw new ManifestError(`${name} is missing or malformed`);
+    throw new ManifestError(`${label} is missing or malformed`);
   return value;
 };
+
+/** Raw, unvalidated identity values plus the names to blame in errors. */
+interface IdentitySource {
+  values: {
+    event: string | undefined;
+    sha?: string | undefined;
+    ref: string | undefined;
+    repository: string | undefined;
+    runId: string | undefined;
+    runAttempt: string | undefined;
+    workflowRef: string | undefined;
+  };
+  /** `sha` is set only when the source carries a SHA to cross-check. */
+  labels: Record<
+    'event' | 'ref' | 'repository' | 'runId' | 'runAttempt' | 'workflowRef',
+    string
+  > & { sha?: string };
+  workflowPattern: RegExp;
+}
+
+type Identity = Pick<
+  QualityManifest,
+  | 'repository'
+  | 'ref'
+  | 'event'
+  | 'pullRequest'
+  | 'runId'
+  | 'runAttempt'
+  | 'workflowRef'
+>;
+
+/** The single identity validator shared by the GitHub Actions and local paths. */
+function validateIdentity(source: IdentitySource, commitSha: string): Identity {
+  const { values, labels } = source;
+  const eventName = values.event;
+  if (eventName !== 'push' && eventName !== 'pull_request')
+    throw new ManifestError(`${labels.event} must be push or pull_request`);
+  if (
+    labels.sha !== undefined &&
+    need(labels.sha, values.sha, sha) !== commitSha
+  )
+    throw new ManifestError(`${labels.sha} does not match the scanned commit`);
+  const ref = need(
+    labels.ref,
+    values.ref,
+    eventName === 'push' ? refName : pullRef,
+  );
+  return {
+    repository: need(labels.repository, values.repository, repository),
+    ref,
+    event: eventName,
+    pullRequest:
+      eventName === 'pull_request' ? Number(pullRef.exec(ref)?.[1]) : null,
+    runId: Number(need(labels.runId, values.runId, counter)),
+    runAttempt: Number(need(labels.runAttempt, values.runAttempt, counter)),
+    workflowRef: need(
+      labels.workflowRef,
+      values.workflowRef,
+      source.workflowPattern,
+    ),
+  };
+}
+
+const environmentSource = (
+  environment: Record<string, string | undefined>,
+): IdentitySource => ({
+  values: {
+    event: environment.GITHUB_EVENT_NAME,
+    sha: environment.GITHUB_SHA,
+    ref: environment.GITHUB_REF,
+    repository: environment.GITHUB_REPOSITORY,
+    runId: environment.GITHUB_RUN_ID,
+    runAttempt: environment.GITHUB_RUN_ATTEMPT,
+    workflowRef: environment.GITHUB_WORKFLOW_REF,
+  },
+  labels: {
+    event: 'GITHUB_EVENT_NAME',
+    sha: 'GITHUB_SHA',
+    ref: 'GITHUB_REF',
+    repository: 'GITHUB_REPOSITORY',
+    runId: 'GITHUB_RUN_ID',
+    runAttempt: 'GITHUB_RUN_ATTEMPT',
+    workflowRef: 'GITHUB_WORKFLOW_REF',
+  },
+  workflowPattern: workflowRef,
+});
+
+/** Explicit identity of a local (non-Actions) scan, from `run` flags. */
+export interface LocalIdentityFlags {
+  repository?: string | undefined;
+  ref?: string | undefined;
+  event?: string | undefined;
+  runId?: string | undefined;
+  /** Defaults to 1 when the flag is absent. */
+  runAttempt?: string | undefined;
+}
+
+const localSource = (flags: LocalIdentityFlags): IdentitySource => ({
+  values: {
+    event: flags.event,
+    ref: flags.ref,
+    repository: flags.repository,
+    runId: flags.runId,
+    runAttempt: flags.runAttempt ?? '1',
+    workflowRef: localWorkflowRef,
+  },
+  labels: {
+    event: '--event',
+    ref: '--ref',
+    repository: '--repository',
+    runId: '--run-id',
+    runAttempt: '--run-attempt',
+    workflowRef: 'workflowRef',
+  },
+  workflowPattern: localWorkflowPattern,
+});
+
+/**
+ * Validate a local identity with the same rules as the environment path. Throws
+ * ManifestError; the commit SHA is never an input (it comes from git).
+ */
+export const validateLocalIdentity = (flags: LocalIdentityFlags): Identity =>
+  validateIdentity(localSource(flags), '');
+
+type ManifestInput = Parameters<typeof buildManifest>[1];
 
 /**
  * Build the portal manifest from the GitHub Actions environment. Every field
@@ -86,32 +213,40 @@ export function buildManifest(
     }[];
   },
 ): QualityManifest {
+  checkRefs(input);
+  return assemble(
+    validateIdentity(environmentSource(environment), input.commitSha),
+    input,
+  );
+}
+
+/** Build the manifest for a local scan from explicit, validated flags. */
+export function buildLocalManifest(
+  flags: LocalIdentityFlags,
+  input: ManifestInput,
+): QualityManifest {
+  checkRefs(input);
+  return assemble(validateLocalIdentity(flags), input);
+}
+
+function checkRefs(input: ManifestInput): void {
   if (!sha.test(input.commitSha))
     throw new ManifestError('commit SHA is not a full 40-character SHA');
   if (!sha.test(input.codeQualityRef))
     throw new ManifestError('code-quality-ref is not a full 40-character SHA');
-  const eventName = environment.GITHUB_EVENT_NAME;
-  if (eventName !== 'push' && eventName !== 'pull_request')
-    throw new ManifestError('GITHUB_EVENT_NAME must be push or pull_request');
-  if (need(environment, 'GITHUB_SHA', sha) !== input.commitSha)
-    throw new ManifestError('GITHUB_SHA does not match the scanned commit');
-  const ref = need(
-    environment,
-    'GITHUB_REF',
-    eventName === 'push' ? refName : pullRef,
-  );
-  const pullRequest =
-    eventName === 'pull_request' ? Number(pullRef.exec(ref)?.[1]) : null;
+}
+
+function assemble(identity: Identity, input: ManifestInput): QualityManifest {
   return {
     schemaVersion: 1,
-    repository: need(environment, 'GITHUB_REPOSITORY', repository),
+    repository: identity.repository,
     commitSha: input.commitSha,
-    ref,
-    event: eventName,
-    pullRequest,
-    runId: Number(need(environment, 'GITHUB_RUN_ID', counter)),
-    runAttempt: Number(need(environment, 'GITHUB_RUN_ATTEMPT', counter)),
-    workflowRef: need(environment, 'GITHUB_WORKFLOW_REF', workflowRef),
+    ref: identity.ref,
+    event: identity.event,
+    pullRequest: identity.pullRequest,
+    runId: identity.runId,
+    runAttempt: identity.runAttempt,
+    workflowRef: identity.workflowRef,
     codeQualityRef: input.codeQualityRef,
     engines: input.results.map((r) => ({
       id: r.engine,

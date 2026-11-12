@@ -34,6 +34,7 @@ export const envelopeReasons = [
   'unsupported-platform',
   'workspace-error',
   'cleanup-uncertain',
+  'incomplete-history',
   'customer-config-rejected',
   'no-supported-files',
   'parse-failure',

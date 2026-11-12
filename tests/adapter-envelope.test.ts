@@ -1,5 +1,18 @@
+/*
+Test classification: contract
+Review status: Not Reviewed
+Evidence: synthetic
+Scope: Validates the versioned adapter result envelope and runAdapter isolation, limits and cancellation against fake executables; does not run real scanner binaries.
+*/
 import assert from 'node:assert/strict';
-import { chmod, mkdtemp, readdir, rm, writeFile } from 'node:fs/promises';
+import {
+  chmod,
+  mkdir,
+  mkdtemp,
+  readdir,
+  rm,
+  writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -354,6 +367,11 @@ const dir = await mkdtemp(join(tmpdir(), 'adapter-test-'));
 const executable = join(dir, 'fake-engine');
 await writeFile(executable, fakeSource);
 await chmod(executable, 0o755);
+// Adapter workspaces go to os.tmpdir(); a private TMPDIR keeps the cleanup
+// checks below independent of other test files running concurrently.
+const privateTmp = join(dir, 'tmp');
+await mkdir(privateTmp);
+process.env.TMPDIR = privateTmp;
 const adapter: ScannerAdapter = {
   engine: { id: 'fake', version: '1.0.0' },
   rulesetVersion: 'rules-1',
@@ -379,9 +397,7 @@ const files = { 'a.ts': 'const x = 1;\n' };
 const run = (mode: string, extra: object = {}) =>
   runAdapter(adapter, { scope, files, args: [`--mode=${mode}`], ...extra });
 const tempEntries = async () =>
-  (await readdir(tmpdir())).filter(
-    (n) => n.startsWith('adapter-') && !n.startsWith('adapter-test-'),
-  );
+  (await readdir(privateTmp)).filter((n) => n.startsWith('adapter-'));
 const linux = process.platform === 'linux';
 
 await test(

@@ -63,7 +63,7 @@ npm via the registry). Where they differ from our pin, both are shown.
 - Recommendation: **Proceed** with engine and checks, customer-run; **Defer** DB redistribution or hosted DB mirroring.
 
 ### Semgrep CE engine and Semgrep Registry rules
-Sources: dated captures taken 2026-11-12 by the project owner of the [Rules License](https://semgrep.dev/legal/rules-license/) and the [licensing summary](https://docs.semgrep.dev/licensing) (PDFs not in this repo; quotes below were relayed by the owner and not re-fetched by the author of this doc), plus the [Semgrep terms](https://semgrep.dev/legal/terms/) and the [engine licence](https://github.com/semgrep/semgrep/blob/develop/LICENSE). Version: Semgrep CE v1.185.0 ([tags](https://github.com/semgrep/semgrep/tags)).
+Sources: dated captures (2026-11-12, 07:41 UTC) of the [Rules License](https://semgrep.dev/legal/rules-license/) (page "Last updated December 13th, 2024") and the [licensing summary](https://docs.semgrep.dev/licensing). The captures were read in full by the author of this doc; the quotes below were checked against them (PDFs are held by the project owner, not in this repo). The [Semgrep terms](https://semgrep.dev/legal/terms/) and the [engine licence](https://github.com/semgrep/semgrep/blob/develop/LICENSE) quotes were relayed by the owner and are **not** re-verified. Version: Semgrep CE v1.185.0 ([tags](https://github.com/semgrep/semgrep/tags)).
 
 **Engine (standalone CE): proceed subject to LGPL compliance review.**
 - LGPL-2.1. The Semgrep terms exclude the "Semgrep OSS Engine" from their proprietary Software definition and say it is licensed under LGPL 2.1. The engine licence states: "The act of running a program using the Library is not restricted".
@@ -71,7 +71,11 @@ Sources: dated captures taken 2026-11-12 by the project owner of the [Rules Lice
 - CE is feature-limited (taint is "Single file, single-function taint" per Semgrep's comparison); it is not equivalent to Semgrep Pro. This grants no rights to Semgrep-maintained rules or proprietary services.
 
 **Semgrep-maintained rules (Rules License v1.0): do not use in the customer product.**
-- The licence limits use to "your own internal business purposes" and does not allow distribution or making the rules available as a service. The summary says: "Vendors cannot use Semgrep-maintained rules in competing products or SaaS offerings."
+- Licence text (verified): "You may use the rules only for your own internal business purposes. This license does not allow you to distribute the rules, or to make them available to others as a service." The licence is also non-sublicensable and non-transferable.
+- Summary text (verified): "Vendors cannot use Semgrep-maintained rules in competing products or SaaS offerings." It applies to "all rules, which includes both Community and Pro rules, listed in the semgrep-rules repository".
+- Notices: licensor notices must not be altered, removed or obscured and must be kept in any copy; modified copies need a prominent modification notice. Patent licence ends if you or your company make a written patent-infringement claim against the rules or any Semgrep product. "Your company" includes affiliates under common control.
+- Violating use is unlicensed and the licences terminate automatically.
+- Semgrep invites commercial arrangements: "If you are interested in using Semgrep products for your own solutions and code analysis tools, send us an email at partnerships@semgrep.com". Use this route for the customer-run-CI and hosted questions.
 
 | Use | Status |
 |---|---|
@@ -81,7 +85,7 @@ Sources: dated captures taken 2026-11-12 by the project owner of the [Rules Lice
 | Customer-run CI that downloads the rules, with ReleaseReady integrating results | Not expressly resolved by the text: unknown. Obtain Semgrep's written permission before relying on it |
 | Meaning of "competing" | Not precisely defined; a customer-facing code-quality/SAST product is a clear risk and must not be assumed permitted. Legal question |
 
-**Third-party Registry rules:** keep their source-repository licences. No rule IDs or packs are proposed yet, so licences are unknown. Each rule and its source/version needs individual review; neither blanket approval nor blanket rejection is supported.
+**Third-party Registry rules:** inherit the licences of their source repositories (verified; the summary cites Trail of Bits rules under AGPL-3.0 as an example, so copyleft can apply). No rule IDs or packs are proposed yet, so licences are unknown. Each rule and its source/version needs individual review; neither blanket approval nor blanket rejection is supported.
 
 **Recommendation:** standalone CE engine **Proceed (conditional on LGPL review)**; Semgrep-maintained rules in the customer product **Reject unless Semgrep grants written permission**; third-party rules **Defer, per-rule review**. Interpretations above are the owner's, not legal advice; counsel confirms the competing-use boundary.
 

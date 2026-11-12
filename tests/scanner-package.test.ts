@@ -1,3 +1,7 @@
+// Test classification: integration
+// Review status: Not Reviewed
+// Evidence: synthetic
+// Scope: npm pack of an allowlisted copy of the package consumed offline from a temp node_modules; not a registry install.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
@@ -21,7 +25,18 @@ await test('packed consumer receives exact schema/notices and public scan API wi
   const directory = await mkdtemp(join(root, '.fixtures/scanner-package-'));
   try {
     // Explicit allowlist: never copy/read repository README or unrelated files.
-    await copyFile(join(root, 'package.json'), join(directory, 'package.json'));
+    // npm 10 runs `prepare` during `npm pack` even with --ignore-scripts. In this
+    // fixture that would run tsc, which walks up to the repository tsconfig.json and
+    // rewrites the real dist/ (briefly corrupting the pinned schema JSON). The packed
+    // manifest therefore carries no lifecycle scripts; everything else is unchanged.
+    const manifest = JSON.parse(
+      await readFile(join(root, 'package.json'), 'utf8'),
+    ) as { scripts?: unknown };
+    delete manifest.scripts;
+    await writeFile(
+      join(directory, 'package.json'),
+      `${JSON.stringify(manifest, null, 2)}\n`,
+    );
     await mkdir(join(directory, 'dist'), { recursive: true });
     await cp(join(root, 'dist/src'), join(directory, 'dist/src'), {
       recursive: true,

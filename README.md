@@ -4,7 +4,17 @@
 
 Use tested Node 22.23.4 and the exact package/lockfile pins. ESLint 10.13.0 and typescript-eslint 8.72.1 support TypeScript 5.9.3, not TypeScript 7. Pinned jiti loads TS configurations; only emitted dist JavaScript is generated.
 After cloning: `npm ci`, `npm run setup:dev`, then `npm run check`. Developer setup builds and installs Husky hooks. Git-dependency prepare builds exports only and must not alter consumer hooks.
-Tests use disposable Git repositories and ordinary commits. Installation smoke tests access the npm registry; no customer code or hosted CI runs.
+Tests use disposable Git repositories and ordinary commits. Installation smoke tests access the npm registry; no customer code runs.
+
+### Environment requirements
+
+- **Node** `22.23.4` (or `>=24.3.0`), see `engines`.
+- **Git 2.47 or newer** at `/usr/bin/git` (`/usr/local/bin/git` on FreeBSD), or any absolute path in `CODE_QUALITY_GIT_EXECUTABLE`. Committed-snapshot scanning refuses older Git because its isolation relies on `GIT_NO_LAZY_FETCH`. Ubuntu 24.04 ships Git 2.43, so on such hosts (including Claude cloud containers) install a newer Git and export `CODE_QUALITY_GIT_EXECUTABLE`. Without it the Git-backed tests fail up front with a message naming this requirement; they are not skipped.
+- `/usr/bin/tar` and a POSIX shell; the packed-consumer test uses `npm pack` offline and needs no network.
+
+### CI
+
+`.github/workflows/ci.yml` runs on every pull request and push to `main` (ubuntu-latest, Node 22.23.4, read-only token, no secrets): `npm ci`, `build`, `format:check`, `lint`, `test`. Run `npm run check` locally for the same gate.
 
 ## Offline report imports
 

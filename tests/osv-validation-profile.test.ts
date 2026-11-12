@@ -1,3 +1,8 @@
+// Test classification: integration
+// Review status: Not Reviewed
+// Evidence: synthetic
+// Scope: OSV validation profile against a synthetic committed fixture with real Git; no network.
+import { requireSupportedGit } from './git-requirement.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { createHash } from 'node:crypto';
@@ -222,7 +227,7 @@ await test('CLI rejects null or unknown profile with bounded invalid JSON and ex
   const cli = resolve(import.meta.dirname, '../src/scan-cli.js');
   for (const validationProfile of [null, 'unknown']) {
     const input = {
-      gitExecutable: '/usr/bin/git',
+      gitExecutable: requireSupportedGit(),
       gitDirectory: '/missing/.git',
       commitSha: 'a'.repeat(40),
       osvDatabase: {

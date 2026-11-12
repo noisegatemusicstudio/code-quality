@@ -30,7 +30,9 @@
     "./osv-adapter": "./dist/src/osv-adapter.js",
     "./quality-measures": "./dist/src/quality-measures.js",
     "./coverage-detail": "./dist/src/coverage-detail.js",
-    "./duplication": "./dist/src/duplication.js"
+    "./duplication": "./dist/src/duplication.js",
+    "./eslint-adapter": "./dist/src/eslint-adapter.js",
+    "./finding-compare": "./dist/src/finding-compare.js"
   },
   "scripts": {
     "build": "tsc && node dist/src/build-assets.js",

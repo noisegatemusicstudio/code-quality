@@ -408,11 +408,11 @@ await test('jscpd adapter pins the version, allowlists args and emits both sides
   assert.equal(adapter.versionOutput, '5.4.3');
   assert.equal(allowedArguments(adapter, []), true);
   assert.equal(allowedArguments(adapter, ['--install']), false);
-  const parsed = adapter.parse(jscpdReport());
+  const parsed = adapter.parse(jscpdReport(), { sourceRoot: '/ws' });
   assert.equal(parsed?.findings.length, 4);
   assert.equal(new Set(parsed?.findings.map((f) => f.fingerprint)).size, 4);
   assert.equal(parsed?.findings[0]?.message, 'Duplicate of repo/src/y.ts:1-10');
-  assert.equal(adapter.parse('nonsense'), undefined);
+  assert.equal(adapter.parse('nonsense', { sourceRoot: '/ws' }), undefined);
 });
 
 await test('assembled output is versioned, has provenance and no ratings', () => {

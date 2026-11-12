@@ -35,6 +35,9 @@ export const envelopeReasons = [
   'workspace-error',
   'cleanup-uncertain',
   'incomplete-history',
+  'customer-config-rejected',
+  'no-supported-files',
+  'parse-failure',
 ] as const;
 export type EnvelopeReason = (typeof envelopeReasons)[number];
 export type EnvelopeProvenance = 'imported-unverified' | 'adapter-executed';

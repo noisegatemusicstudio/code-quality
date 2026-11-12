@@ -351,6 +351,8 @@ export function createSemgrepAdapter(options: SemgrepOptions): ScannerAdapter {
     rulesetVersion: `${options.ruleset.source}-${options.ruleset.version}`,
     configVersion: semgrepConfigVersion,
     executable: options.executable,
+    // semgrep-core runs `uname`; nothing else is added to the scrubbed environment.
+    systemPath: true,
     versionArgs: ['--version'],
     versionOutput: semgrepVersion,
     fixedArgs: [

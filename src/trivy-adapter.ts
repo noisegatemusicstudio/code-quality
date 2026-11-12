@@ -376,13 +376,9 @@ export async function runTrivyScan(
       else disclosure.droppedFiles.push(name);
     }
   }
-  const common = [
-    '--format',
-    'json',
-    '--quiet',
-    '--no-progress',
-    '--skip-version-check',
-  ];
+  // `trivy config` has no --no-progress flag (unknown flag, exit 1).
+  const common = ['--format', 'json', '--quiet', '--skip-version-check'];
+  const progress = target.kind === 'iac' ? [] : ['--no-progress'];
   const offline =
     mode === 'offline' ? ['--skip-db-update', '--offline-scan'] : [];
   let fixedArgs: string[];
@@ -391,6 +387,7 @@ export async function runTrivyScan(
     fixedArgs = [
       'image',
       ...common,
+      ...progress,
       '--scanners',
       'vuln',
       ...offline,
@@ -402,6 +399,7 @@ export async function runTrivyScan(
     fixedArgs = [
       'image',
       ...common,
+      ...progress,
       '--scanners',
       'vuln',
       ...offline,

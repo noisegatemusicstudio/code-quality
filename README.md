@@ -450,3 +450,47 @@ Sources: [ESLint](https://eslint.org/docs/latest/use/configure/configuration-fil
 ## Scanner licensing
 
 Licence, redistribution and hosted-use review of candidate scanners (RRDSCRUM-61): [docs/scanner-licensing.md](docs/scanner-licensing.md).
+
+## Quality scan workflow (GitHub Actions)
+
+`.github/workflows/quality-scan.yml` is a reusable workflow that runs this
+package's scanners on a pull request: ESLint (bundled rules), Gitleaks, Trivy
+(filesystem IaC checks), Semgrep (ReleaseReady rules in `rules/semgrep` only, no
+registry rules), jscpd and OSV. Every engine is downloaded at the version and
+sha256 pinned in `src/scanner-pins.ts` and refused on mismatch; Semgrep is
+installed with `pip --require-hashes` from `scanners/semgrep-requirements.txt`.
+The job needs `contents: read` and no secrets.
+
+```yaml
+# .github/workflows/quality.yml in the caller repository
+on: { pull_request: {}, push: { branches: [main] } }
+permissions: { contents: read }
+jobs:
+  quality:
+    uses: noisegatemusicstudio/code-quality/.github/workflows/quality-scan.yml@<full-sha>
+    with:
+      code-quality-ref: <full-sha> # must be the same full 40-character commit SHA
+      enforce: false # advisory: report, never fail the PR
+```
+
+- **Pin `code-quality-ref` to a full commit SHA** (the job fails otherwise), and
+  pin the `uses:` ref the same way. Tags and branches are not accepted.
+- The organisation's Actions policy must allow reusable workflows from this
+  public repository (Settings, Actions, General, allowed actions and reusable
+  workflows).
+- Inputs: `enforce` (default `false`), `node-version` (default `22.23.4`),
+  `scanners` (comma list or `all`; engines with nothing to scan are skipped),
+  `fail-on-severity` (default `high`), `baseline-path` (optional `report.json`
+  from an earlier run, enabling the new-vs-baseline column).
+- Output: a Markdown job summary (counts per engine; skipped, failed and
+  incomplete engines are listed and never shown as clean) and a `quality-scan`
+  artefact with `report.json`, `summary.md` and per-engine `envelopes/`.
+- Enforce mode fails when any engine is failed or incomplete, or a finding is at
+  or above `fail-on-severity`. Skipped engines do not fail it but are always
+  shown with their reason.
+
+Known limits: OSV is skipped because the offline adapter needs a permitted
+advisory database that is not provisioned yet. Gitleaks and jscpd use the
+committed-snapshot API, so they need a full-history checkout, Git 2.47 or newer,
+and stay within its size bounds (otherwise they report `failed`). A project's own
+ESLint config is ignored; the bundled rules run instead.

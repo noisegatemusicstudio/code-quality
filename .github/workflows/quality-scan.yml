@@ -1,0 +1,106 @@
+# Reusable ReleaseReady quality scan. Callers pin `code-quality-ref` to a full
+# commit SHA. See README "Quality scan workflow".
+name: Quality scan
+
+on:
+  workflow_call:
+    inputs:
+      enforce:
+        description: Fail the job on failed/incomplete engines or findings at or above fail-on-severity. Default is advisory.
+        type: boolean
+        default: false
+      node-version:
+        type: string
+        default: 22.23.4
+      scanners:
+        description: 'Comma list of eslint, gitleaks, osv, trivy, semgrep, jscpd, or all (applicable engines only).'
+        type: string
+        default: all
+      code-quality-ref:
+        description: Full 40-character commit SHA of noisegatemusicstudio/code-quality to run.
+        type: string
+        required: true
+      fail-on-severity:
+        description: 'Enforce threshold: info, low, medium, high or critical.'
+        type: string
+        default: high
+      baseline-path:
+        description: Optional repo-relative path of a previous report.json for the new-vs-baseline split.
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CQ_REF: ${{ inputs.code-quality-ref }}
+      CQ_SCANNERS: ${{ inputs.scanners }}
+      CQ_ENFORCE: ${{ inputs.enforce }}
+      CQ_FAIL_ON: ${{ inputs.fail-on-severity }}
+      CQ_BASELINE: ${{ inputs.baseline-path }}
+    steps:
+      - name: Require a full-SHA code-quality-ref
+        run: |
+          if ! [[ "$CQ_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "code-quality-ref must be a full 40-character commit SHA" >&2
+            exit 2
+          fi
+      - name: Check out the commit under test
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          persist-credentials: false
+          # Full history: the committed-snapshot scanners reject shallow repositories.
+          fetch-depth: 0
+      - name: Check out the scanner tooling
+        uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
+        with:
+          repository: noisegatemusicstudio/code-quality
+          ref: ${{ inputs.code-quality-ref }}
+          path: .quality-tool
+          persist-credentials: false
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: ${{ inputs.node-version }}
+      - name: Build the scanner tooling
+        working-directory: .quality-tool
+        run: |
+          npm ci --ignore-scripts
+          npm run build
+      - name: Install pinned engines (sha256-verified)
+        run: node .quality-tool/dist/src/quality-scan-cli.js install --dir "$RUNNER_TEMP/engines" --scanners "$CQ_SCANNERS"
+      - name: Install pinned Semgrep (hash-locked)
+        id: semgrep
+        run: |
+          list=",$(printf '%s' "$CQ_SCANNERS" | tr 'A-Z ' 'a-z'),"
+          case "$list" in *,semgrep,*|*,all,*|,,) ;; *) exit 0 ;; esac
+          if python3 -m venv "$RUNNER_TEMP/semgrep" \
+            && "$RUNNER_TEMP/semgrep/bin/pip" install --quiet --require-hashes --only-binary=:all: --no-deps \
+              -r .quality-tool/scanners/semgrep-requirements.txt; then
+            echo "bin=$RUNNER_TEMP/semgrep/bin/semgrep" >> "$GITHUB_OUTPUT"
+          else
+            echo "error=hash-locked semgrep install failed" >> "$GITHUB_OUTPUT"
+          fi
+      - name: Run scans
+        run: |
+          args=(run --repo "$GITHUB_WORKSPACE" --out "$RUNNER_TEMP/quality-scan"
+            --tools-dir "$RUNNER_TEMP/engines" --scanners "$CQ_SCANNERS"
+            --enforce "$CQ_ENFORCE" --fail-on-severity "$CQ_FAIL_ON"
+            --rules "$GITHUB_WORKSPACE/.quality-tool/rules/semgrep")
+          if [ -n "$SEMGREP_BIN" ]; then args+=(--semgrep "$SEMGREP_BIN"); fi
+          if [ -n "$SEMGREP_ERROR" ]; then args+=(--semgrep-error "$SEMGREP_ERROR"); fi
+          if [ -n "$CQ_BASELINE" ]; then args+=(--baseline "$CQ_BASELINE"); fi
+          node .quality-tool/dist/src/quality-scan-cli.js "${args[@]}"
+        env:
+          SEMGREP_BIN: ${{ steps.semgrep.outputs.bin }}
+          SEMGREP_ERROR: ${{ steps.semgrep.outputs.error }}
+      - name: Upload report and envelopes
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: quality-scan
+          path: ${{ runner.temp }}/quality-scan
+          if-no-files-found: warn

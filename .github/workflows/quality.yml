@@ -1,0 +1,17 @@
+name: Quality
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  quality:
+    # Dogfood: advisory mode, scanner tooling built from the commit under test.
+    uses: ./.github/workflows/quality-scan.yml
+    with:
+      code-quality-ref: ${{ github.sha }}
+      enforce: false

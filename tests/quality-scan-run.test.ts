@@ -44,7 +44,15 @@ const scope = scopeFromEnvironment({}, 'a'.repeat(40));
 await test('install refuses an asset whose sha256 differs from the pin and writes nothing', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'qs-install-'));
   try {
-    for (const id of ['gitleaks', 'trivy', 'osv', 'jscpd', 'ruff'] as const) {
+    for (const id of [
+      'gitleaks',
+      'trivy',
+      'osv',
+      'jscpd',
+      'ruff',
+      'pmd',
+      'checkstyle',
+    ] as const) {
       await assert.rejects(
         installEngine(id, join(dir, id), () =>
           Promise.resolve(new TextEncoder().encode('tampered')),

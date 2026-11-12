@@ -153,7 +153,7 @@ threshold; the workflow default `high` equals the gate's.
 Every run lists the languages found with file counts. A language without a
 language-aware engine is reported as `skipped: no engine yet`, in both
 `summary.md` and `report.json` (`languages`). Today only TypeScript and
-JavaScript (ESLint, Semgrep), Python (Ruff), Shell (ShellCheck, shfmt), GitHub Actions
+JavaScript (ESLint, Semgrep), Python (Ruff), Java (PMD, Checkstyle), Shell (ShellCheck, shfmt), GitHub Actions
 workflows (actionlint, zizmor), Dockerfile (Trivy, hadolint), Terraform (Trivy,
 tflint), YAML (yamllint) and Markdown (markdownlint) count as covered; gitleaks, OSV and jscpd are language-agnostic and not counted.
 
@@ -177,7 +177,11 @@ tflint), YAML (yamllint) and Markdown (markdownlint) count as covered; gitleaks,
 5. Dockerfile: hadolint (GPL, internal runs first). **Done.**
 6. Terraform: tflint beside Trivy. **Done** (bundled terraform ruleset, no plugins).
 7. Kotlin: detekt and ktlint (RRDSCRUM-186).
-8. Java: PMD, Checkstyle, SpotBugs + FindSecBugs (RRDSCRUM-185; needs a build).
+8. Java: PMD, Checkstyle, SpotBugs + FindSecBugs (RRDSCRUM-185). **Done for
+   the source-only engines:** PMD 7.29.0 (quickstart) and Checkstyle 14.4.0
+   (Google checks) run on the workflow's JDK; SpotBugs is reported
+   `skipped: requires compiled classes` until a reviewed build input exists
+   (FindSecBugs comes with it).
 9. Swift: SwiftLint (needs a Swift runner).
 10. YAML and Markdown: yamllint and markdownlint. **Done.**
 11. Prettier check as an engine for TS/JS and the formats above.

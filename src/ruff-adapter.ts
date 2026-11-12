@@ -1,4 +1,3 @@
-import { realpathSync } from 'node:fs';
 import {
   type AdapterEnvelope,
   type AdapterFinding,
@@ -9,6 +8,7 @@ import {
   redactMessage,
 } from './adapter-envelope.js';
 import { assembleFindings } from './finding-assembly.js';
+import { relativeSourcePath } from './source-paths.js';
 import {
   type ParsedOutput,
   type ScannerAdapter,
@@ -73,28 +73,13 @@ export function parseRuffReport(
 ): ParsedOutput {
   const root: unknown = JSON.parse(stdout);
   if (!Array.isArray(root)) throw new TypeError('not a ruff report');
-  const prefixes: string[] = [];
-  if (sourceRoot) {
-    prefixes.push(sourceRoot);
-    try {
-      prefixes.push(realpathSync(sourceRoot));
-    } catch {
-      /* the workspace is gone; the raw root still applies */
-    }
-  }
   let partial: EnvelopeReason | undefined;
   const candidates: Omit<AdapterFinding, 'fingerprint'>[] = [];
   for (const item of root as unknown[]) {
     const start = isRecord(item) ? position(item.location) : undefined;
     const end = isRecord(item) ? position(item.end_location) : undefined;
     let path: unknown = isRecord(item) ? item.filename : undefined;
-    if (typeof path === 'string') {
-      let relative: string = path;
-      for (const prefix of prefixes)
-        if (relative.startsWith(`${prefix}/`))
-          relative = relative.slice(prefix.length + 1);
-      path = relative.startsWith('./') ? relative.slice(2) : relative;
-    }
+    if (typeof path === 'string') path = relativeSourcePath(path, sourceRoot);
     const code = isRecord(item) ? item.code : undefined;
     if (
       !isRecord(item) ||

@@ -32,7 +32,16 @@ import {
   type GitleaksException,
   classifyGitleaksEnvelope,
 } from './gitleaks-adapter.js';
+import {
+  checkstyleVersion,
+  isJavaFile,
+  pmdVersion,
+  pmdVersionOutput,
+  runCheckstyleScan,
+  runPmdScan,
+} from './java-adapters.js';
 import { ruffVersion, runRuffScan } from './ruff-adapter.js';
+import { installZipTree, treeMatches } from './tree-install.js';
 import {
   type LintEngineId,
   lintAdapter,
@@ -60,6 +69,9 @@ import {
   lintPins,
   osvPin,
   mypyPin,
+  pmdPin,
+  releaseTrees,
+  spotbugsPin,
   releaseAssets,
   tflintPin,
   trivyPin,
@@ -101,6 +113,8 @@ export type InstallableEngine =
   | 'osv'
   | 'jscpd'
   | 'ruff'
+  | 'pmd'
+  | 'checkstyle'
   | 'hadolint'
   | 'tflint'
   | LintEngineId;
@@ -110,6 +124,8 @@ export const installableEngines: readonly InstallableEngine[] = [
   'osv',
   'jscpd',
   'ruff',
+  'pmd',
+  'checkstyle',
   'shellcheck',
   'shfmt',
   'actionlint',
@@ -128,6 +144,18 @@ export async function installEngine(
   directory: string,
   download: Downloader = defaultDownloader,
 ): Promise<string> {
+  if (id === 'pmd') {
+    const tree = releaseTrees.pmd;
+    const archive = await download(tree.url);
+    if (sha256(archive) !== tree.assetSha256)
+      throw new Error('pmd: asset sha256 mismatch');
+    return installZipTree({
+      bytes: archive,
+      member: tree.member,
+      treeSha256: tree.treeSha256,
+      target: join(directory, 'pmd'),
+    });
+  }
   const asset = releaseAssets[id];
   const bytes = await download(asset.url);
   if (sha256(bytes) !== asset.assetSha256)
@@ -448,7 +476,10 @@ export interface RunOptions {
   selected: readonly EngineId[];
   /** Absolute path of each installed engine binary, if installation worked. */
   tools: Partial<
-    Record<InstallableEngine | 'semgrep' | 'yamllint' | 'markdownlint', string>
+    Record<
+      InstallableEngine | 'semgrep' | 'yamllint' | 'markdownlint' | 'java',
+      string
+    >
   >;
   /** Install failure reasons, so a missing engine is reported as failed. */
   installErrors: Partial<Record<EngineId, string>>;
@@ -772,6 +803,67 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
       causes,
     );
   });
+
+  // Java: PMD and Checkstyle run source-only on the workflow's JDK. A missing
+  // JDK or engine is a failed engine, never a clean one.
+  const scanJava = async (
+    id: 'pmd' | 'checkstyle',
+    version: string,
+    scan: (files: Record<string, string>) => Promise<AdapterEnvelope>,
+  ): Promise<EngineResult> => {
+    const { files, omitted, causes } = await readBoundedFiles(
+      options.repo,
+      paths,
+      isJavaFile,
+    );
+    return applyOmitted(
+      fromEnvelope(id, await scan(files), version),
+      omitted,
+      causes,
+    );
+  };
+  await guard('pmd', async () => {
+    const java = options.tools.java;
+    const pmdDirectory = options.tools.pmd;
+    if (
+      !java ||
+      !pmdDirectory ||
+      !(await treeMatches(pmdDirectory, pmdPin.treeSha256))
+    )
+      return failed(
+        'pmd',
+        options.installErrors.pmd ??
+          'pmd or java missing, or pmd tree sha256 mismatch',
+      );
+    const versionOutput = await pmdVersionOutput(java, pmdDirectory);
+    return scanJava('pmd', pmdVersion, (files) =>
+      runPmdScan({
+        java,
+        pmdDirectory,
+        versionOutput,
+        scope: options.scope,
+        files,
+      }),
+    );
+  });
+  await guard('checkstyle', async () => {
+    const java = options.tools.java;
+    const jar = options.tools.checkstyle;
+    if (!java || !jar)
+      return failed(
+        'checkstyle',
+        options.installErrors.checkstyle ?? 'checkstyle or java missing',
+      );
+    return scanJava('checkstyle', checkstyleVersion, (files) =>
+      runCheckstyleScan({ java, jar, scope: options.scope, files }),
+    );
+  });
+  await guard('spotbugs', () =>
+    Promise.resolve({
+      ...skipped('spotbugs', 'unavailable', spotbugsPin.skipReason),
+      version: spotbugsPin.version,
+    }),
+  );
 
   await guard('mypy', () =>
     Promise.resolve({

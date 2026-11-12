@@ -27,7 +27,7 @@ const rules: readonly LanguageRule[] = [
     engines: ['eslint', 'semgrep'],
   },
   { language: 'Python', test: ext(/\.pyi?$/), engines: ['ruff'] },
-  { language: 'Java', test: ext(/\.java$/), engines: [] },
+  { language: 'Java', test: ext(/\.java$/), engines: ['pmd', 'checkstyle'] },
   { language: 'Kotlin', test: ext(/\.kts?$/), engines: [] },
   { language: 'Swift', test: ext(/\.swift$/), engines: [] },
   {

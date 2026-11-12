@@ -107,7 +107,7 @@ if (a[0] === '--version') { console.log('osv-scanner fake 2.7.1'); process.exit(
 const path = a[a.indexOf('-L') + 1] ?? a[a.indexOf('--sbom') + 1];
 const kind = path.split('/')[0];
 const raw = require('node:fs').readFileSync('${dir}/' + kind + '.json', 'utf8');
-process.stdout.write(raw.replaceAll('/tmp/work/package-lock.json', process.cwd() + '/' + path));
+process.stdout.write(raw.replaceAll('/workspace/package-lock.json', process.cwd() + '/' + path));
 process.exit(kind === 'vulnerable' ? 1 : 0);
 `,
 );

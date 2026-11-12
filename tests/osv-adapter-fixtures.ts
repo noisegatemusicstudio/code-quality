@@ -26,7 +26,7 @@ const report = (path: string, packages: unknown[]) =>
   });
 
 export const artefact = 'package-lock.json';
-export const vulnerableReport = report(`/tmp/work/${artefact}`, [
+export const vulnerableReport = report(`/workspace/${artefact}`, [
   // Same advisory reported twice under different ids: must merge.
   pkg('4.17.15', [
     vuln('GHSA-p6mc-m468-83gw', ['CVE-2020-8203'], '4.17.19'),
@@ -37,9 +37,9 @@ export const vulnerableReport = report(`/tmp/work/${artefact}`, [
   // A different advisory on the first version stays separate; no fix known.
   pkg('4.17.15', [vuln('GHSA-35jh-r3h4-6jhm', ['CVE-2021-23337'])]),
 ]);
-export const fixedReport = report(`/tmp/work/${artefact}`, [pkg('4.17.21')]);
+export const fixedReport = report(`/workspace/${artefact}`, [pkg('4.17.21')]);
 export const emptyReport = JSON.stringify({ results: [] });
-export const otherPathReport = report('/tmp/work/other/yarn.lock', [
+export const otherPathReport = report('/workspace/other/yarn.lock', [
   pkg('1.0.0', [vuln('GHSA-aaaa-bbbb-cccc', [])]),
 ]);
 export const malformedReports = [
@@ -47,6 +47,6 @@ export const malformedReports = [
   '[]',
   JSON.stringify({ results: 'x' }),
   JSON.stringify({ results: [{ source: {}, packages: [] }] }),
-  report(`/tmp/work/${artefact}`, [{ package: { name: 'a' } }]),
-  report(`/tmp/work/${artefact}`, [pkg('1.0.0', [{ id: 'bad id!' }])]),
+  report(`/workspace/${artefact}`, [{ package: { name: 'a' } }]),
+  report(`/workspace/${artefact}`, [pkg('1.0.0', [{ id: 'bad id!' }])]),
 ];

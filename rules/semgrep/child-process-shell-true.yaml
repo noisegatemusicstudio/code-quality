@@ -1,0 +1,28 @@
+# Copyright (c) 2026 ReleaseReady. All rights reserved.
+# ReleaseReady-authored Semgrep rule (RRDSCRUM-133). Written from scratch; not
+# copied or derived from the Semgrep Registry or any other third-party rule set.
+# Ruleset version: 2026.11.1
+rules:
+  - id: releaseready.js.child-process-shell-true
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: A child process is started with shell true, so shell metacharacters in arguments are interpreted.
+    pattern-either:
+      - pattern: 'spawn(..., {..., shell: true, ...})'
+      - pattern: 'spawnSync(..., {..., shell: true, ...})'
+      - pattern: 'execFile(..., {..., shell: true, ...})'
+      - pattern: 'execFileSync(..., {..., shell: true, ...})'
+      - pattern: '$CP.spawn(..., {..., shell: true, ...})'
+      - pattern: '$CP.spawnSync(..., {..., shell: true, ...})'
+      - pattern: '$CP.execFile(..., {..., shell: true, ...})'
+      - pattern: '$CP.execFileSync(..., {..., shell: true, ...})'
+    metadata:
+      category: security
+      cwe: 'CWE-78: Improper Neutralization of Special Elements used in an OS Command'
+      confidence: HIGH
+      finding-type: vulnerability
+      remediation: 'Remove shell: true and pass the command and its arguments as separate array items.'
+      author: ReleaseReady
+      license: 'Proprietary, all rights reserved (ReleaseReady-authored)'
+      version: '1'
+      ruleset-version: '2026.11.1'

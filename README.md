@@ -179,6 +179,13 @@ Future work, out of scope here: authenticated, idempotent central upload;
 recorded redistribution and hosted-use approvals per engine; network-enforced
 isolation; baseline comparison of fingerprints across runs.
 
+## Scoped ESLint code-quality adapter
+
+`runEslintScan` lints customer JS/TS with the bundled approved config only,
+rejects customer ESLint configs, never auto-fixes and never claims SAST, coverage
+or duplication analysis; `compareFindings` reports new, existing and resolved
+findings. See [docs/eslint-adapter.md](docs/eslint-adapter.md).
+
 ## Reviewed consumer adoption
 
 Pin an approved immutable Git SHA. Declare ESLint, Prettier, Husky, lint-staged, jiti and TypeScript directly at this package's exact versions; preserve lockfiles and never depend on transitive binary hoisting.

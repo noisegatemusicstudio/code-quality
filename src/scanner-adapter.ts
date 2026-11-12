@@ -60,7 +60,10 @@ export interface ScannerAdapter {
    * Parse stdout into findings. `partial` marks results the engine reported as
    * incomplete. Throw or return `undefined` for unusable output.
    */
-  parse(stdout: string): ParsedOutput | undefined;
+  parse(
+    stdout: string,
+    context: { sourceRoot: string },
+  ): ParsedOutput | undefined;
 }
 export interface ParsedOutput {
   findings: AdapterFinding[];
@@ -238,7 +241,9 @@ export async function runAdapter(
       return build('failed', 'engine-error');
     let parsed: ParsedOutput | undefined;
     try {
-      parsed = adapter.parse(run.stdout.toString('utf8'));
+      parsed = adapter.parse(run.stdout.toString('utf8'), {
+        sourceRoot: source,
+      });
     } catch {
       parsed = undefined;
     }

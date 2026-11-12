@@ -472,12 +472,20 @@ package's scanners on a pull request: ESLint (bundled rules), Gitleaks, Trivy
 registry rules), jscpd and OSV, plus ShellCheck and shfmt (`-d`, never rewrites)
 for shell scripts, actionlint and zizmor (`--offline`) for workflows, hadolint
 (Dockerfiles), tflint (Terraform, bundled ruleset only, no plugin downloads),
-yamllint and markdownlint-cli2, all with bundled default configs (project
+yamllint and markdownlint-cli2, Ruff (Python) and detekt plus ktlint (Kotlin),
+all with bundled default configs (project
 configs are never applied). Every engine is downloaded at the version and
 sha256 pinned in `src/scanner-pins.ts` and refused on mismatch; Semgrep is
 installed with `pip --require-hashes` from `scanners/semgrep-requirements.txt`
 (yamllint likewise from `scanners/yamllint-requirements.txt`); markdownlint-cli2
 comes from the integrity-checked `package-lock.json`.
+
+detekt and ktlint are sha256-pinned jars that need a Java runtime. The
+workflow uses the Java already on `ubuntu-latest` (`JAVA_HOME/bin/java`, else
+`/usr/bin/java`); the scan never installs one. Without a runtime both engines
+are reported `skipped: needs a Java runtime`, never clean, and they only run
+when the repository has tracked `.kt` or `.kts` files. They read no project
+configuration (`detekt.yml`, `.editorconfig`), apply no plugins and never format.
 The job needs `contents: read` and no secrets.
 
 ```yaml
@@ -566,7 +574,8 @@ guessed. Fields (`schemaVersion` 1):
 | `engines[]`           | list                     | one entry per engine, below                                           |
 
 Each `engines[]` entry: `id` (`eslint`, `gitleaks`, `osv`, `trivy`, `semgrep`,
-`jscpd`, `hadolint`, `tflint`, `yamllint`, `markdownlint`), `version` (string or `null`), `status` (`completed`, `incomplete`,
+`jscpd`, `ruff`, `mypy`, `detekt`, `ktlint`, `hadolint`, `tflint`, `yamllint`,
+`markdownlint`), `version` (string or `null`), `status` (`completed`, `incomplete`,
 `failed` or `skipped`), `reason` (string or `null`), `findingCount` (after
 exceptions), `exceptedCount`, and `envelope` (artifact-relative path or `null`).
 Treat anything other than `completed` as "not clean". Additive fields may

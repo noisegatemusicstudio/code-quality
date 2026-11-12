@@ -2,6 +2,7 @@ import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { constants } from 'node:fs';
 import {
+  access,
   chmod,
   lstat,
   mkdtemp,
@@ -11,7 +12,7 @@ import {
   mkdir,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { dirname, join, resolve } from 'node:path';
+import { dirname, isAbsolute, join, resolve } from 'node:path';
 import { promisify } from 'node:util';
 import {
   type AdapterEnvelope,
@@ -32,6 +33,13 @@ import {
   type GitleaksException,
   classifyGitleaksEnvelope,
 } from './gitleaks-adapter.js';
+import {
+  createDetektAdapter,
+  createKtlintAdapter,
+  javaSkipReason,
+  kotlinFile,
+  runKotlinScan,
+} from './kotlin-adapter.js';
 import { ruffVersion, runRuffScan } from './ruff-adapter.js';
 import {
   type LintEngineId,
@@ -59,6 +67,8 @@ import {
   markdownlintPin,
   lintPins,
   osvPin,
+  detektPin,
+  ktlintPin,
   mypyPin,
   releaseAssets,
   tflintPin,
@@ -101,6 +111,8 @@ export type InstallableEngine =
   | 'osv'
   | 'jscpd'
   | 'ruff'
+  | 'detekt'
+  | 'ktlint'
   | 'hadolint'
   | 'tflint'
   | LintEngineId;
@@ -110,6 +122,8 @@ export const installableEngines: readonly InstallableEngine[] = [
   'osv',
   'jscpd',
   'ruff',
+  'detekt',
+  'ktlint',
   'shellcheck',
   'shfmt',
   'actionlint',
@@ -456,6 +470,48 @@ export interface RunOptions {
   rulesDirectory: string;
   /** `online` (default) sends package metadata to the OSV API; see the summary. */
   osvMode?: OsvMode;
+  /** Absolute path of a Java runtime (see `findJava`); without one the Kotlin engines are skipped. */
+  java?: string;
+}
+
+/**
+ * Locate a Java runtime for the Kotlin engines: `JAVA_HOME/bin/java` (set by
+ * `actions/setup-java`), else `/usr/bin/java`. Returns `undefined` when none is
+ * executable, so the engines report `skipped` instead of a clean result.
+ */
+export async function findJava(
+  environment: Record<string, string | undefined>,
+): Promise<string | undefined> {
+  const home = environment.JAVA_HOME;
+  const candidates = [
+    ...(home && isAbsolute(home) ? [join(home, 'bin', 'java')] : []),
+    '/usr/bin/java',
+  ];
+  for (const candidate of candidates) {
+    try {
+      await access(candidate, constants.X_OK);
+      return candidate;
+    } catch {
+      /* try the next candidate */
+    }
+  }
+  return undefined;
+}
+
+/** `--version` of a verified jar under the scrubbed environment; it must name the pinned version. */
+export async function jarVersionOutput(
+  java: string,
+  jar: string,
+  expectedVersion: string,
+): Promise<string> {
+  const { stdout } = await exec(java, ['-jar', jar, '--version'], {
+    env: { LANG: 'C', LC_ALL: 'C', TZ: 'UTC' },
+    timeout: 20000,
+  });
+  const output = stdout.trim();
+  if (!output.includes(expectedVersion))
+    throw new Error('unexpected engine version');
+  return output;
 }
 
 const maxLockfiles = 20;
@@ -772,6 +828,48 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
       causes,
     );
   });
+
+  const kotlinEngine = (
+    id: 'detekt' | 'ktlint',
+    pin: typeof detektPin | typeof ktlintPin,
+    createAdapter: typeof createDetektAdapter,
+  ) =>
+    guard(id, async () => {
+      const java = options.java;
+      if (!java)
+        return {
+          ...skipped(id, 'unavailable', javaSkipReason),
+          version: pin.version,
+        };
+      const executable = options.tools[id];
+      if (!executable || !(await executableMatches(executable, pin.sha256)))
+        return failed(
+          id,
+          options.installErrors[id] ?? `${id} missing or sha256 mismatch`,
+        );
+      const { files, omitted, causes } = await readBoundedFiles(
+        options.repo,
+        paths,
+        (p) => kotlinFile.test(p),
+      );
+      const adapter = createAdapter(
+        java,
+        executable,
+        await jarVersionOutput(java, executable, pin.version),
+      );
+      const result = await runKotlinScan({
+        adapter,
+        scope: options.scope,
+        files,
+      });
+      return applyOmitted(
+        fromEnvelope(id, result, pin.version),
+        omitted,
+        causes,
+      );
+    });
+  await kotlinEngine('detekt', detektPin, createDetektAdapter);
+  await kotlinEngine('ktlint', ktlintPin, createKtlintAdapter);
 
   await guard('mypy', () =>
     Promise.resolve({

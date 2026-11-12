@@ -1,3 +1,4 @@
+import { realpathSync } from 'node:fs';
 import {
   type AdapterFinding,
   type EnvelopeReason,
@@ -40,4 +41,25 @@ export function assembleFindings<T extends Candidate>(
     };
   });
   return reason ? { findings, partial: reason } : { findings };
+}
+
+/**
+ * Report path to repository-relative path: strips a `file://` scheme, the
+ * workspace root (raw and realpath forms) and a leading `./`.
+ */
+export function relativeToRoot(path: string, sourceRoot?: string): string {
+  const prefixes: string[] = [];
+  if (sourceRoot) {
+    prefixes.push(sourceRoot);
+    try {
+      prefixes.push(realpathSync(sourceRoot));
+    } catch {
+      /* the workspace is gone; the raw root still applies */
+    }
+  }
+  let relative = path.startsWith('file://') ? path.slice(7) : path;
+  for (const prefix of prefixes)
+    if (relative.startsWith(`${prefix}/`))
+      relative = relative.slice(prefix.length + 1);
+  return relative.startsWith('./') ? relative.slice(2) : relative;
 }

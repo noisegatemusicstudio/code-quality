@@ -17,6 +17,8 @@ export const engineIds = [
   'jscpd',
   'ruff',
   'mypy',
+  'detekt',
+  'ktlint',
   'shellcheck',
   'shfmt',
   'actionlint',
@@ -93,6 +95,7 @@ const isEngine = (value: string): value is EngineId =>
 const eslintExtension = /\.(?:[cm]?[jt]s)$/;
 const semgrepExtension = /\.(?:[cm]?[jt]s|[jt]sx)$/;
 const pythonExtension = /\.pyi?$/;
+const kotlinExtension = /\.kts?$/;
 const shellFile = /\.(?:sh|bash|ksh)$/;
 const workflowFile = /(?:^|\/)\.github\/workflows\/[^/]+\.ya?ml$/;
 const iacFile =
@@ -146,6 +149,8 @@ export function detectApplicability(
       : no('no JavaScript or TypeScript files'),
     ruff: some((p) => pythonExtension.test(p)) ? yes : no('no Python files'),
     mypy: some((p) => pythonExtension.test(p)) ? yes : no('no Python files'),
+    detekt: some((p) => kotlinExtension.test(p)) ? yes : no('no Kotlin files'),
+    ktlint: some((p) => kotlinExtension.test(p)) ? yes : no('no Kotlin files'),
     shellcheck: some((p) => shellFile.test(p)) ? yes : no('no shell scripts'),
     shfmt: some((p) => shellFile.test(p)) ? yes : no('no shell scripts'),
     actionlint: some((p) => workflowFile.test(p))
@@ -207,6 +212,17 @@ export function normaliseSeverity(
     };
     return ruff[label] ?? 'high';
   }
+  if (engine === 'detekt') {
+    // SARIF levels from the detekt rule severity: error, warning, note.
+    const detekt: Record<string, Severity> = {
+      error: 'high',
+      warning: 'medium',
+      note: 'low',
+    };
+    return detekt[label] ?? 'high';
+  }
+  // ktlint has no severity; every violation is a style finding.
+  if (engine === 'ktlint') return label === 'style' ? 'low' : 'high';
   // Lint engines: errors are medium, warnings low, notices and style info.
   // markdownlint has no native levels (recorded as `error`), so it ranks low.
   if (engine === 'markdownlint') return label === 'error' ? 'low' : 'high';

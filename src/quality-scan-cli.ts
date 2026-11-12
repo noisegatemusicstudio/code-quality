@@ -17,6 +17,7 @@ import { loadGate, decideWithGate } from './quality-gate.js';
 import {
   applyGitleaksExceptions,
   ExceptionSourceError,
+  findJava,
   loadExceptions,
   type ExceptionLoad,
   installEngine,
@@ -193,6 +194,7 @@ async function run(args: string[]): Promise<number> {
       option(args, 'rules') ?? join(repo, 'rules/semgrep'),
     ),
     osvMode,
+    java: await findJava(process.env),
   });
   const now = new Date();
   const results = scanned.map((r) =>

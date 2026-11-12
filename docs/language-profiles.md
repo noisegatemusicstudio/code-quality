@@ -127,7 +127,7 @@ default `high` equals the gate's.
 Every run lists the languages found with file counts. A language without a
 language-aware engine is reported as `skipped: no engine yet`, in both
 `summary.md` and `report.json` (`languages`). Today only TypeScript and
-JavaScript (ESLint, Semgrep), Python (Ruff), Shell (ShellCheck, shfmt), GitHub Actions
+JavaScript (ESLint, Semgrep), Python (Ruff), Kotlin (detekt, ktlint), Shell (ShellCheck, shfmt), GitHub Actions
 workflows (actionlint, zizmor), Dockerfile (Trivy, hadolint), Terraform (Trivy,
 tflint), YAML (yamllint) and Markdown (markdownlint) count as covered; gitleaks, OSV and jscpd are language-agnostic and not counted.
 
@@ -150,7 +150,10 @@ tflint), YAML (yamllint) and Markdown (markdownlint) count as covered; gitleaks,
 4. GitHub Actions: actionlint and zizmor (cheap, MIT, we already ship workflows). **Done**: pinned, zizmor offline.
 5. Dockerfile: hadolint (GPL, internal runs first). **Done.**
 6. Terraform: tflint beside Trivy. **Done** (bundled terraform ruleset, no plugins).
-7. Kotlin: detekt and ktlint (RRDSCRUM-186).
+7. Kotlin: detekt and ktlint (RRDSCRUM-186). **Done:** detekt 1.23.8 (default
+   ruleset, SARIF) and ktlint 1.8.0 (official style, JSON reporter) are
+   sha256-pinned jars run as `java -jar`; no Java runtime means
+   `skipped: needs a Java runtime` (see `docs/scanner-licensing.md`).
 8. Java: PMD, Checkstyle, SpotBugs + FindSecBugs (RRDSCRUM-185; needs a build).
 9. Swift: SwiftLint (needs a Swift runner).
 10. YAML and Markdown: yamllint and markdownlint. **Done.**

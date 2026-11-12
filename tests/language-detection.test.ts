@@ -16,6 +16,7 @@ const paths = [
   'web/c.mjs',
   'tools/x.py',
   'app/Main.kt',
+  'ios/App.swift',
   'build.gradle.kts',
   'scripts/run.sh',
   'Dockerfile',
@@ -46,9 +47,15 @@ await test('Python is covered by Ruff, not skipped', () => {
   assert.deepEqual(python?.engines, ['ruff']);
 });
 
+await test('Kotlin is covered by detekt and ktlint, not skipped', () => {
+  const kotlin = detectLanguages(paths).find((l) => l.language === 'Kotlin');
+  assert.equal(kotlin?.status, 'covered');
+  assert.deepEqual(kotlin?.engines, ['detekt', 'ktlint']);
+});
+
 await test('languages without an engine are skipped, never clean', () => {
   const byName = new Map(detectLanguages(paths).map((l) => [l.language, l]));
-  for (const name of ['Kotlin']) {
+  for (const name of ['Swift']) {
     assert.equal(byName.get(name)?.status, 'skipped: no engine yet', name);
     assert.deepEqual(byName.get(name)?.engines, []);
   }

@@ -32,6 +32,8 @@ import {
   externalPins,
   osvPin,
   releaseAssets,
+  detektPin,
+  ktlintPin,
   ruffPin,
   semgrepPin,
   trivyPin,
@@ -44,7 +46,15 @@ const scope = scopeFromEnvironment({}, 'a'.repeat(40));
 await test('install refuses an asset whose sha256 differs from the pin and writes nothing', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'qs-install-'));
   try {
-    for (const id of ['gitleaks', 'trivy', 'osv', 'jscpd', 'ruff'] as const) {
+    for (const id of [
+      'gitleaks',
+      'trivy',
+      'osv',
+      'jscpd',
+      'ruff',
+      'detekt',
+      'ktlint',
+    ] as const) {
       await assert.rejects(
         installEngine(id, join(dir, id), () =>
           Promise.resolve(new TextEncoder().encode('tampered')),
@@ -68,6 +78,10 @@ await test('release assets agree with the engine pins and upstream versions', ()
   assert.equal(releaseAssets.trivy.binarySha256, trivyPin.sha256);
   assert.equal(releaseAssets.ruff.binarySha256, ruffPin.sha256);
   assert.ok(releaseAssets.ruff.url.includes(`/${ruffPin.version}/`));
+  assert.equal(releaseAssets.detekt.binarySha256, detektPin.sha256);
+  assert.ok(releaseAssets.detekt.url.includes(`v${detektPin.version}/`));
+  assert.equal(releaseAssets.ktlint.binarySha256, ktlintPin.sha256);
+  assert.ok(releaseAssets.ktlint.url.includes(`/${ktlintPin.version}/`));
   assert.equal(trivyPin.version, trivyAdapterEngine.version);
   assert.equal(semgrepPin.version, semgrepVersion);
   for (const [id, asset] of Object.entries(releaseAssets)) {

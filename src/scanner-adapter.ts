@@ -39,6 +39,8 @@ export const adapterLimits = Object.freeze({
   fileBytes: 1048576,
   totalBytes: 16777216,
   executableBytes: 67108864,
+  /** Ceiling for an adapter's own `executableMaxBytes` (self-contained JVM jars). */
+  executableBytesCeiling: 134217728,
   args: 32,
   argChars: 256,
 });
@@ -57,6 +59,14 @@ export interface ScannerAdapter {
    * engines take this from `externalPins`/`osvPin`.
    */
   executableSha256?: string;
+  /** Size cap for the executable read; defaults to `adapterLimits.executableBytes`, at most the ceiling. */
+  executableMaxBytes?: number;
+  /**
+   * Interpreter for an executable that is not run directly (a JVM jar). The
+   * verified copy is passed as the last runtime argument, so the runtime runs
+   * exactly the hashed bytes: `<runtime.executable> ...<runtime.args> <copy> ...args`.
+   */
+  runtime?: { executable: string; args: readonly string[] };
   /**
    * Engines whose report reporter writes a file (for example jscpd) declare
    * it here. `path` is relative to the private workspace (the engine runs in
@@ -103,7 +113,11 @@ function adapterProblem(adapter: ScannerAdapter): string | undefined {
   if (
     !isAbsolute(adapter.executable) ||
     adapter.executable.includes('\0') ||
-    forbiddenExecutables.has(basename(adapter.executable))
+    forbiddenExecutables.has(basename(adapter.executable)) ||
+    (adapter.runtime !== undefined &&
+      (!isAbsolute(adapter.runtime.executable) ||
+        adapter.runtime.executable.includes('\0') ||
+        forbiddenExecutables.has(basename(adapter.runtime.executable))))
   )
     return 'executable';
   if (
@@ -113,6 +127,10 @@ function adapterProblem(adapter: ScannerAdapter): string | undefined {
     adapter.versionOutput.length === 0 ||
     (adapter.executableSha256 !== undefined &&
       !/^[a-f0-9]{64}$/.test(adapter.executableSha256)) ||
+    (adapter.executableMaxBytes !== undefined &&
+      (!Number.isSafeInteger(adapter.executableMaxBytes) ||
+        adapter.executableMaxBytes < 1 ||
+        adapter.executableMaxBytes > adapterLimits.executableBytesCeiling)) ||
     (adapter.outputFile !== undefined &&
       (!isSafeRelativePath(adapter.outputFile.path) ||
         adapter.outputFile.path.split('/').length < 2 ||
@@ -233,7 +251,7 @@ export async function runAdapter(
       try {
         bytes = await readBoundedRegular(
           adapter.executable,
-          adapterLimits.executableBytes,
+          adapter.executableMaxBytes ?? adapterLimits.executableBytes,
         );
       } catch {
         return build('failed', 'engine-version-mismatch');
@@ -252,9 +270,15 @@ export async function runAdapter(
         recursive: true,
         mode: 0o700,
       });
+    const launch = (args: readonly string[]) =>
+      adapter.runtime
+        ? {
+            executable: adapter.runtime.executable,
+            args: [...adapter.runtime.args, executable, ...args],
+          }
+        : { executable, args };
     const version = await runScannerProcess({
-      executable,
-      args: adapter.versionArgs,
+      ...launch(adapter.versionArgs),
       cwd: workspace,
       timeoutMs: Math.min(timeoutMs, 10000),
       outputLimit: 4096,
@@ -269,8 +293,7 @@ export async function runAdapter(
     )
       return build('failed', 'engine-version-mismatch');
     const run = await runScannerProcess({
-      executable,
-      args: [...adapter.fixedArgs, ...args],
+      ...launch([...adapter.fixedArgs, ...args]),
       cwd: source,
       timeoutMs,
       outputLimit: adapterLimits.stdoutBytes,

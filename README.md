@@ -357,7 +357,9 @@ technical-debt estimate or composite score (`measuresNotProvided` lists them).
   sizes). jscpd does not list clone-free files, so the denominator is the
   report's `statistics.total.lines`, accepted only if the format totals agree and
   the snapshot counts of the clone files fit inside it; the method is recorded
-  as `counting` in the measure's provenance. A scope with exclusions is
+  as `counting` in the measure's provenance. jscpd 5.4.3 does not name clone-free
+  or skipped files, so they cannot be itemised and no analysed-file list is
+  guessed; a failed cross-check fails closed (`invalid`). A scope with exclusions is
   `unsupported`, because the report-wide denominator cannot be scoped.
 - `/quality-measures`: `buildQualityMeasures`, `newCodeMeasures`,
   `overallMeasures` and `evaluateThreshold` produce the typed, versioned

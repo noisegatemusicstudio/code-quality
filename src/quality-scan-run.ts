@@ -24,8 +24,14 @@ import { runEslintScan } from './eslint-adapter.js';
 import {
   type EngineId,
   type EngineResult,
+  type OsvMode,
   detectApplicability,
 } from './quality-scan.js';
+import {
+  type GitleaksException,
+  classifyGitleaksEnvelope,
+} from './gitleaks-adapter.js';
+import { osvLockfileNames, runOsvScan } from './osv-adapter.js';
 import { adapterLimits } from './scanner-adapter.js';
 import {
   externalPins,
@@ -330,6 +336,76 @@ export interface RunOptions {
   installErrors: Partial<Record<EngineId, string>>;
   gitExecutable: string;
   rulesDirectory: string;
+  /** `online` (default) sends package metadata to the OSV API; see the summary. */
+  osvMode?: OsvMode;
+}
+
+const maxLockfiles = 20;
+const envelopeStatusRank = {
+  completed: 0,
+  skipped: 1,
+  incomplete: 2,
+  failed: 3,
+};
+/** Combine per-lockfile OSV envelopes: the worst status wins, findings concatenate. */
+export function mergeEnvelopes(
+  envelopes: readonly AdapterEnvelope[],
+): AdapterEnvelope {
+  const [first, ...rest] = envelopes;
+  if (!first) throw new Error('no envelopes to merge');
+  if (!rest.length) return first;
+  const worst = envelopes.reduce((a, b) =>
+    envelopeStatusRank[b.status] > envelopeStatusRank[a.status] ? b : a,
+  );
+  const mixed = envelopes.some((e) => e.status !== worst.status);
+  // A skipped lockfile next to a scanned one means partial coverage.
+  const status =
+    worst.status === 'skipped' && mixed ? 'incomplete' : worst.status;
+  const merged: AdapterEnvelope = {
+    ...first,
+    status,
+    findings: envelopes.flatMap((e) => e.findings),
+  };
+  delete merged.reason;
+  if (status !== 'completed')
+    merged.reason = worst.reason ?? 'incomplete-history';
+  return merged;
+}
+
+/**
+ * Apply reviewed gitleaks exceptions to a result. Only findings matching an
+ * exception's exact fingerprint, rule and path, unexpired and within the 90-day
+ * cap, are removed from `findings`; the envelope keeps every finding.
+ */
+export function applyGitleaksExceptions(
+  result: EngineResult,
+  exceptions: readonly GitleaksException[],
+  now: Date,
+): EngineResult {
+  if (result.engine !== 'gitleaks' || !result.envelope || !exceptions.length)
+    return result;
+  const classified = classifyGitleaksEnvelope(result.envelope, {
+    exceptions,
+    now,
+  });
+  if (!classified.counts.excepted) return result;
+  return {
+    ...result,
+    findings: classified.active,
+    excepted: classified.counts.excepted,
+  };
+}
+
+/** Parse `{ "gitleaks": [...] }`; throws on anything else rather than guessing. */
+export function parseExceptions(text: string): GitleaksException[] {
+  const parsed: unknown = JSON.parse(text);
+  const list =
+    typeof parsed === 'object' && parsed !== null
+      ? (parsed as { gitleaks?: unknown }).gitleaks
+      : undefined;
+  if (!Array.isArray(list))
+    throw new Error('exceptions file needs a gitleaks array');
+  return list as GitleaksException[];
 }
 
 /** Run every selected engine against the checked-out commit. Never throws. */
@@ -434,15 +510,69 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     );
   });
 
-  await guard('osv', () =>
-    Promise.resolve(
-      skipped(
+  await guard('osv', async () => {
+    const mode = options.osvMode ?? 'online';
+    if (mode === 'off')
+      return skipped('osv', 'not-selected', 'osv-mode is off');
+    if (mode === 'offline')
+      return skipped(
         'osv',
         'unavailable',
-        `lockfile found, but the offline-only adapter needs a caller-supplied advisory database and none is provisioned (OSV data redistribution is deferred in docs/scanner-licensing.md; the public npm all.zip archive is not accepted by the database validator); osv-scanner ${osvPin.version} not run`,
-      ),
-    ),
-  );
+        `osv-mode is offline, but the offline-only adapter needs a caller-supplied advisory database and none is provisioned (OSV data redistribution is deferred in docs/scanner-licensing.md); osv-scanner ${osvPin.version} not run`,
+      );
+    const executable = options.tools.osv;
+    if (!executable || !(await executableMatches(executable, osvPin.sha256)))
+      return failed(
+        'osv',
+        options.installErrors.osv ?? 'osv-scanner missing or sha256 mismatch',
+      );
+    const lockfiles = paths.filter((p) =>
+      osvLockfileNames.includes(baseName(p)),
+    );
+    if (!lockfiles.length)
+      return skipped(
+        'osv',
+        'unavailable',
+        'no lockfile the OSV adapter accepts',
+      );
+    const versionOutput = (
+      await exec(executable, ['--version'], {
+        env: { LANG: 'C', LC_ALL: 'C', TZ: 'UTC' },
+        timeout: 10000,
+      })
+    ).stdout.trim();
+    const envelopes: AdapterEnvelope[] = [];
+    let omitted = Math.max(0, lockfiles.length - maxLockfiles);
+    let disclosure = '';
+    for (const lockfile of lockfiles.slice(0, maxLockfiles)) {
+      const { files, omitted: skippedFiles } = await readBoundedFiles(
+        options.repo,
+        paths,
+        (p) => p === lockfile,
+      );
+      omitted += skippedFiles;
+      const content = files[lockfile];
+      if (content === undefined) continue;
+      const scan = await runOsvScan(
+        { executable, versionOutput, mode: 'online' },
+        {
+          scope: options.scope,
+          artefactPath: lockfile,
+          artefactContent: content,
+        },
+      );
+      envelopes.push(scan.envelope);
+      if (scan.envelope.status !== 'skipped')
+        disclosure = `online mode: ${scan.disclosure.transmitted}`;
+    }
+    if (!envelopes.length)
+      return failed('osv', 'no lockfile could be read within adapter limits');
+    const result = applyOmitted(
+      fromEnvelope('osv', mergeEnvelopes(envelopes), osvPin.version),
+      omitted,
+    );
+    return disclosure ? { ...result, disclosure } : result;
+  });
 
   // gitleaks and jscpd run through the committed-snapshot API.
   const snapshotEngines = (['gitleaks', 'jscpd'] as const).filter(todo);

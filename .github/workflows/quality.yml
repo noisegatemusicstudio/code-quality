@@ -1,9 +1,10 @@
 name: Quality
 
+# Owner-approved exception to the hosted-CI pause (Jira RRDPLAT-24): the quality
+# scan runs on every push and pull request.
 on:
-  pull_request:
   push:
-    branches: [main]
+  pull_request:
 
 permissions:
   contents: read

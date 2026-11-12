@@ -222,10 +222,17 @@ await test('reusable workflow: workflow_call, read-only permissions, no secrets,
     'node-version',
     'scanners',
     'code-quality-ref',
+    'osv-mode',
   ])
     assert.match(text, new RegExp(`^ {6}${input}:`, 'm'));
   assert.match(text, /enforce:[\s\S]*?default: false/);
   assert.match(text, /node-version:[\s\S]*?default: 22\.23\.4/);
+  assert.match(text, /osv-mode:[\s\S]*?default: online/);
+  assert.match(
+    text,
+    /name: code-quality-results\n\s+path: .*\n\s+retention-days: 90/,
+  );
+  assert.equal(/name: quality-scan\b/.test(text), false);
   const uses = [...text.matchAll(/uses:\s*(\S+)/g)].map((m) => m[1]);
   assert.ok(uses.length >= 3);
   for (const u of uses) assert.match(u, /^[\w.-]+\/[\w.-]+@[0-9a-f]{40}$/, u);
@@ -233,13 +240,13 @@ await test('reusable workflow: workflow_call, read-only permissions, no secrets,
   assert.equal(/run:[^\n]*\$\{\{\s*inputs\./.test(text), false);
 });
 
-await test('dogfood workflow calls the reusable one in advisory mode on pull_request and main', async () => {
+await test('dogfood workflow calls the reusable one in advisory mode on every push and pull_request', async () => {
   const text = await readFile(
     new URL('quality.yml', workflowDirectory),
     'utf8',
   );
-  assert.match(text, /pull_request:/);
-  assert.match(text, /branches: \[main\]/);
+  assert.match(text, /^on:\n {2}push:\n {2}pull_request:\n/m);
+  assert.equal(/branches:/.test(text), false);
   assert.match(text, /uses: \.\/\.github\/workflows\/quality-scan\.yml/);
   assert.match(text, /enforce: false/);
   assert.match(text, /code-quality-ref: \$\{\{ github\.sha \}\}/);

@@ -132,9 +132,12 @@ await test(
       assert.equal(report.evidence, 'executed');
       assert.ok(!JSON.stringify(report).includes('value29'));
       assert.ok(!JSON.stringify(report).includes(directory));
+      const marker = 'jscpd' + ':ignore';
       await writeFile(
         join(directory, 'src/a.ts'),
-        '// jscpd:ignore-start\n' + code + '\n// jscpd:ignore-end\n',
+        // Assembled at runtime so no committed file contains the directive
+        // text, which would itself trip the scanner's suppression guard.
+        `// ${marker}-start\n${code}\n// ${marker}-end\n`,
       );
       const suppressed = await runExternalScanner(
         'jscpd',

@@ -31,6 +31,20 @@ export interface EngineResult {
   findings: AdapterFinding[];
   /** Validated adapter envelope, when the engine produced one. */
   envelope?: AdapterEnvelope | null;
+  /** Findings removed from `findings` by a reviewed, unexpired exception. */
+  excepted?: number;
+  /** What this engine sent off the runner, shown in the job summary. */
+  disclosure?: string;
+}
+
+export type OsvMode = 'online' | 'offline' | 'off';
+/** Parse the `osv-mode` input: empty means the default `online`. */
+export function parseOsvMode(value: string | undefined): OsvMode | undefined {
+  const mode = (value ?? '').trim().toLowerCase();
+  if (mode === '') return 'online';
+  return mode === 'online' || mode === 'offline' || mode === 'off'
+    ? mode
+    : undefined;
 }
 
 const toList = (value: string): string[] =>
@@ -321,6 +335,7 @@ export function renderSummary(input: {
     const notes = [
       r.status === 'skipped' && r.skipKind ? `skipped (${r.skipKind})` : '',
       r.reason ? mdEscape(r.reason) : '',
+      r.excepted ? `${r.excepted} excepted (reviewed exception)` : '',
     ]
       .filter(Boolean)
       .join(': ');
@@ -348,6 +363,16 @@ export function renderSummary(input: {
     for (const r of withFindings)
       lines.push(`- **${r.engine}**: ${topRules(r.findings, 5)}`);
   }
+  const disclosed = results.filter((r) => r.disclosure);
+  if (disclosed.length)
+    lines.push(
+      '',
+      '### Data sent off the runner',
+      '',
+      ...disclosed.map(
+        (r) => `- **${r.engine}**: ${mdEscape(r.disclosure ?? '')}`,
+      ),
+    );
   lines.push(
     '',
     '### Gate',

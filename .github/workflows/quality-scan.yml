@@ -24,6 +24,10 @@ on:
         description: 'Enforce threshold: info, low, medium, high or critical.'
         type: string
         default: high
+      osv-mode:
+        description: 'online (default; package names, versions and ecosystems are sent to the OSV API), offline (not provisioned, OSV is skipped) or off.'
+        type: string
+        default: online
       baseline-path:
         description: Optional repo-relative path of a previous report.json for the new-vs-baseline split.
         type: string
@@ -42,6 +46,7 @@ jobs:
       CQ_ENFORCE: ${{ inputs.enforce }}
       CQ_FAIL_ON: ${{ inputs.fail-on-severity }}
       CQ_BASELINE: ${{ inputs.baseline-path }}
+      CQ_OSV_MODE: ${{ inputs.osv-mode }}
     steps:
       - name: Require a full-SHA code-quality-ref
         run: |
@@ -89,7 +94,8 @@ jobs:
           args=(run --repo "$GITHUB_WORKSPACE" --out "$RUNNER_TEMP/quality-scan"
             --tools-dir "$RUNNER_TEMP/engines" --scanners "$CQ_SCANNERS"
             --enforce "$CQ_ENFORCE" --fail-on-severity "$CQ_FAIL_ON"
-            --rules "$GITHUB_WORKSPACE/.quality-tool/rules/semgrep")
+            --rules "$GITHUB_WORKSPACE/.quality-tool/rules/semgrep"
+            --osv-mode "$CQ_OSV_MODE" --code-quality-ref "$CQ_REF")
           if [ -n "$SEMGREP_BIN" ]; then args+=(--semgrep "$SEMGREP_BIN"); fi
           if [ -n "$SEMGREP_ERROR" ]; then args+=(--semgrep-error "$SEMGREP_ERROR"); fi
           if [ -n "$CQ_BASELINE" ]; then args+=(--baseline "$CQ_BASELINE"); fi
@@ -101,6 +107,7 @@ jobs:
         if: ${{ !cancelled() }}
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: quality-scan
+          name: code-quality-results
           path: ${{ runner.temp }}/quality-scan
+          retention-days: 90
           if-no-files-found: warn

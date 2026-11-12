@@ -36,10 +36,11 @@ function compile(allErrors: boolean) {
 }
 const strict = compile(false);
 const metadata = compile(true);
-const cvss4 = new RegExp(
-  schema.$defs.severity.items.allOf[2].then.properties.score.pattern!,
-  'u',
-);
+const cvss4Pattern =
+  schema.$defs.severity.items.allOf[2].then.properties.score.pattern;
+if (cvss4Pattern === undefined)
+  throw new Error('OSV schema is missing the CVSS v4 score pattern');
+const cvss4 = new RegExp(cvss4Pattern, 'u');
 
 function acceptedCvssParent(error: ErrorObject, value: unknown): string | null {
   const path = /^\/severity\/(0|[1-9][0-9]*)\/score$/.exec(error.instancePath);
@@ -71,6 +72,7 @@ export function validateOsvRecord(
   profile: OsvValidationProfile = 'strict-schema-v1',
 ): MetadataWarningCounts {
   const counts = { records: 0, referenceUriFormat: 0, cvssV4TrailingSlash: 0 };
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- exported API: JS callers can pass any profile at runtime.
   if (profile !== 'strict-schema-v1' && profile !== 'npm-metadata-v1') reject();
   if (profile === 'strict-schema-v1') {
     if (!strict(value)) reject();

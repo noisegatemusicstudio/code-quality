@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { execFile } from 'node:child_process';
 import { constants } from 'node:fs';
+import { lookup } from './lookup.js';
 import {
   chmod,
   lstat,
@@ -89,7 +90,8 @@ const maxAssetBytes = 300 * 1024 * 1024;
 export const defaultDownloader: Downloader = async (url) => {
   if (!url.startsWith('https://')) throw new Error('https only');
   const response = await fetch(url, { redirect: 'follow' });
-  if (!response.ok) throw new Error(`download failed: ${response.status}`);
+  if (!response.ok)
+    throw new Error(`download failed: ${String(response.status)}`);
   const bytes = new Uint8Array(await response.arrayBuffer());
   if (bytes.byteLength > maxAssetBytes) throw new Error('asset too large');
   return bytes;
@@ -357,7 +359,7 @@ export function withParseFailures(
     report.parseFailures.length > 20 || report.truncated ? ', and more' : '';
   return {
     ...result,
-    reason: `parse-failure: ${report.parseFailures.length} file(s) the bundled parser cannot parse and were not linted: ${shown}${more}`,
+    reason: `parse-failure: ${String(report.parseFailures.length)} file(s) the bundled parser cannot parse and were not linted: ${shown}${more}`,
   };
 }
 
@@ -369,12 +371,12 @@ export function applyOmitted(
 ): EngineResult {
   if (omitted === 0 || result.status !== 'completed') return result;
   const detail = Object.entries(causes)
-    .map(([cause, count]) => `${cause}: ${count}`)
+    .map(([cause, count]) => `${cause}: ${String(count)}`)
     .join(', ');
   return {
     ...result,
     status: 'incomplete',
-    reason: `${omitted} file(s) exceeded adapter input limits, were unreadable or not UTF-8 and were not scanned${detail ? ` (${detail})` : ''}`,
+    reason: `${String(omitted)} file(s) exceeded adapter input limits, were unreadable or not UTF-8 and were not scanned${detail ? ` (${detail})` : ''}`,
   };
 }
 
@@ -469,7 +471,8 @@ const envelopeStatusRank = {
 export function mergeEnvelopes(
   envelopes: readonly AdapterEnvelope[],
 ): AdapterEnvelope {
-  const [first, ...rest] = envelopes;
+  const first = envelopes.at(0);
+  const rest = envelopes.slice(1);
   if (!first) throw new Error('no envelopes to merge');
   if (!rest.length) return first;
   const worst = envelopes.reduce((a, b) =>
@@ -973,7 +976,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
         (p) => p === lockfile,
       );
       omitted += skippedFiles;
-      const content = files[lockfile];
+      const content = lookup(files, lockfile);
       if (content === undefined) continue;
       const scan = await runOsvScan(
         { executable, versionOutput, mode: 'online' },

@@ -4,6 +4,7 @@ import {
   aggregateScanReport as run,
   scannerIds as ids,
 } from '../src/scan-report.js';
+import { omitKey } from './omit-key.js';
 const sha = 'a'.repeat(40);
 const good = () =>
   Object.fromEntries(
@@ -71,8 +72,7 @@ await test('each required slot fails closed', () => {
         { id, state },
       );
     }
-    const input = good();
-    delete input[id];
+    const input = omitKey(good(), id);
     assert.equal(run(sha, input).status, 'incomplete');
   }
 });

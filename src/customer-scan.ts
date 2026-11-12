@@ -218,7 +218,7 @@ export async function scanCommittedSource(options: {
       }
     }
     for (const id of ['eslint', 'typescript'] as const) {
-      const slot = scanners.find((slot) => slot.id === id)!;
+      const slot = slotFor(scanners, id);
       if (id === 'typescript' && invalidBundle) {
         slot.state = 'failed';
         slot.reason = 'invalid-declaration-bundle';
@@ -306,18 +306,14 @@ export async function scanCommittedSource(options: {
           options.tools?.[id],
           options.detailedFindings === true,
         );
-        Object.assign(
-          scanners.find((slot) => slot.id === id)!,
-          result,
-          {
-            coverage:
-              result.evidence === 'executed'
-                ? id === 'gitleaks'
-                  ? 'committed-text-default-rules'
-                  : 'native-supported-formats'
-                : 'not-run',
-          },
-        );
+        Object.assign(slotFor(scanners, id), result, {
+          coverage:
+            result.evidence === 'executed'
+              ? id === 'gitleaks'
+                ? 'committed-text-default-rules'
+                : 'native-supported-formats'
+              : 'not-run',
+        });
         if (result.reason === 'cleanup-uncertain') {
           report.cleanup = 'uncertain-retained';
           break;
@@ -331,10 +327,7 @@ export async function scanCommittedSource(options: {
         options.osvDatabase,
         options.detailedFindings === true,
       );
-      Object.assign(
-        scanners.find((slot) => slot.id === 'osv')!,
-        result,
-      );
+      Object.assign(slotFor(scanners, 'osv'), result);
       if (result.reason === 'cleanup-uncertain')
         report.cleanup = 'uncertain-retained';
     }
@@ -349,8 +342,8 @@ export async function scanCommittedSource(options: {
     if (options.imports !== undefined) {
       const imported = aggregateScanReport(snapshot.commitSha, options.imports);
       for (const id of ['tests', 'coverage'] as const) {
-        const claim = imported.scanners.find((slot) => slot.id === id)!;
-        const slot = scanners.find((slot) => slot.id === id)!;
+        const claim = slotFor(imported.scanners, id);
+        const slot = slotFor(scanners, id);
         if (claim.state === 'missing') continue;
         slot.evidence = 'imported-unverified';
         slot.coverage = 'declared-only';
@@ -391,4 +384,11 @@ export async function scanCommittedSource(options: {
     }
   }
   return report;
+}
+
+/** Looks up a scanner slot that the report always contains for every id. */
+function slotFor<T extends { id: string }>(slots: readonly T[], id: string): T {
+  const slot = slots.find((candidate) => candidate.id === id);
+  if (slot === undefined) throw new Error(`missing scanner slot: ${id}`);
+  return slot;
 }

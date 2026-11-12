@@ -20,7 +20,12 @@ const finding = (n: number): AdapterFinding => ({
   nativeSeverity: 'error',
   path: 'a.ts',
   range: { startLine: n, startColumn: 1, endLine: n, endColumn: 4 },
-  fingerprint: stableFingerprint('eslint', 'no-var', 'a.ts', `var x${n}`),
+  fingerprint: stableFingerprint(
+    'eslint',
+    'no-var',
+    'a.ts',
+    `var x${String(n)}`,
+  ),
   message: 'm',
 });
 const env = (

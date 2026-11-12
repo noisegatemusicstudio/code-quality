@@ -320,7 +320,7 @@ await test('eslint parse failures are listed by name and cap the list', () => {
     named.reason ?? '',
     /parse-failure: 2 file\(s\).*a\.vue\.js, b\.ts/,
   );
-  const names = Array.from({ length: 30 }, (_, i) => `f${i}.js`);
+  const names = Array.from({ length: 30 }, (_, i) => `f${String(i)}.js`);
   const capped = withParseFailures(base, {
     parseFailures: names,
     truncated: true,

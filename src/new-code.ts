@@ -125,7 +125,7 @@ export function parseChangedLines(diff: string): ChangedFile[] {
       const m = /^@@ -\d+(?:,\d+)? \+(\d+)(?:,(\d+))? @@/.exec(line);
       if (!m) throw new Error('unreadable hunk header');
       const start = Number(m[1]);
-      const count = m[2] === undefined ? 1 : Number(m[2]);
+      const count = m[2] ? Number(m[2]) : 1;
       for (let i = 0; i < count; i++) cur.lines.push(start + i);
     }
   }
@@ -223,7 +223,7 @@ export async function duplicationFromEngine(
   const analyzed: Record<string, number> = {};
   if (state === 'complete' && result)
     for (let i = 0; i < result.findings.length; i += 2) {
-      const [a, b] = [result.findings[i], result.findings[i + 1]];
+      const [a, b] = [result.findings.at(i), result.findings.at(i + 1)];
       if (!a || !b) continue;
       const side = (f: typeof a) => ({
         path: f.path,

@@ -43,7 +43,7 @@ await test('the hosted scan config adds strict and stylistic rules but no type-a
     'export class OnlyStatic { static x = 1; }\nexport const a: Array<string> = [];\n',
     { filePath: 'probe.ts' },
   );
-  const ids = result?.messages.map((m) => m.ruleId) ?? [];
+  const ids = result.messages.map((m) => m.ruleId);
   assert.ok(ids.includes('@typescript-eslint/no-extraneous-class'), 'strict');
   assert.ok(ids.includes('@typescript-eslint/array-type'), 'stylistic');
   const config = (await eslint.calculateConfigForFile('probe.ts')) as

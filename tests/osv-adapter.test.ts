@@ -43,18 +43,18 @@ await test('parser reports package, advisory, ranges and fix versions', () => {
   assert.ok(parsed);
   assert.equal(parsed.findings.length, 3);
   const first = parsed.findings[0];
-  assert.deepEqual(first?.package, {
+  assert.deepEqual(first.package, {
     name: 'lodash',
     version: '4.17.15',
     ecosystem: 'npm',
   });
-  assert.equal(first?.artefactPath, artefact);
-  assert.equal(first?.advisory.id, 'GHSA-p6mc-m468-83gw');
-  assert.deepEqual(first?.advisory.aliases, ['CVE-2020-8203']);
-  assert.deepEqual(first?.affectedRanges, [
+  assert.equal(first.artefactPath, artefact);
+  assert.equal(first.advisory.id, 'GHSA-p6mc-m468-83gw');
+  assert.deepEqual(first.advisory.aliases, ['CVE-2020-8203']);
+  assert.deepEqual(first.affectedRanges, [
     { type: 'SEMVER', introduced: '0', fixed: '4.17.19' },
   ]);
-  assert.deepEqual(first?.fixedVersions, ['4.17.19']);
+  assert.deepEqual(first.fixedVersions, ['4.17.19']);
   const nofix = parsed.findings.find((f) =>
     f.advisory.id.startsWith('GHSA-35'),
   );

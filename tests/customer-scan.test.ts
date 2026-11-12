@@ -89,8 +89,7 @@ await test('real bounded processes scrub credentials and reject failure, timeout
       ],
     });
     assert.equal(result.state, 'exited');
-    if (result.state === 'exited')
-      assert.equal(result.stdout.toString(), 'absent\n');
+    assert.equal(result.stdout.toString(), 'absent\n');
   } finally {
     delete process.env.SCANNER_TEST_CREDENTIAL;
   }
@@ -277,7 +276,10 @@ await test('trees beyond the old 1000-entry bound snapshot, with a named hard ca
   const f = await fixture();
   try {
     for (let index = 0; index < 1100; index++)
-      await writeFile(join(f.root, `f${index}.txt`), `${index}\n`);
+      await writeFile(
+        join(f.root, `f${String(index)}.txt`),
+        `${String(index)}\n`,
+      );
     f.git('add', '.');
     f.git(
       '-c',
@@ -304,7 +306,8 @@ await test('trees beyond the old 1000-entry bound snapshot, with a named hard ca
     } finally {
       await snapshot.dispose();
     }
-    assert.ok(snapshotBounds.sourceFiles >= 1100);
+    const sourceFiles: number = snapshotBounds.sourceFiles;
+    assert.ok(sourceFiles >= 1100);
     assert.ok(Number.isSafeInteger(snapshotBounds.sourceFiles));
   } finally {
     await f.dispose();
@@ -476,20 +479,18 @@ await test('owned live supervisor cleans descendants even when tool exits first'
     ],
   });
   assert.equal(result.state, 'exited');
-  if (result.state === 'exited') {
-    const pid = Number(result.stdout.toString().trim());
-    assert.ok(Number.isSafeInteger(pid) && pid > 0);
-    try {
-      const stat = await readFile(`/proc/${pid}/stat`, 'utf8');
-      assert.equal(stat.split(') ')[1]?.charAt(0), 'Z');
-    } catch (error) {
-      if (
-        !(error instanceof Error) ||
-        !('code' in error) ||
-        error.code !== 'ENOENT'
-      )
-        throw error;
-    }
+  const pid = Number(result.stdout.toString().trim());
+  assert.ok(Number.isSafeInteger(pid) && pid > 0);
+  try {
+    const stat = await readFile(`/proc/${String(pid)}/stat`, 'utf8');
+    assert.equal(stat.split(') ')[1]?.charAt(0), 'Z');
+  } catch (error) {
+    if (
+      !(error instanceof Error) ||
+      !('code' in error) ||
+      error.code !== 'ENOENT'
+    )
+      throw error;
   }
 });
 

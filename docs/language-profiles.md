@@ -95,11 +95,10 @@ Corrections to the expected candidates:
   `no-unnecessary-condition`, `no-floating-promises`) do not run in hosted
   scans; they run in the caller's own `lint`. The report does not claim
   type-aware coverage.
-- This repository switches off five rules in its own `eslint.config.ts`
-  (`no-unnecessary-condition`, `restrict-template-expressions`,
-  `no-non-null-assertion`, `no-confusing-void-expression`, `no-dynamic-delete`)
-  because the upgrade flags about 130 existing sites. That is migration debt,
-  tracked as follow-up slice 1.
+- This repository lints itself with the same `strict-type-checked` profile it
+  ships; no rule is switched off in its own `eslint.config.ts`. The only
+  exceptions are a few targeted, commented `no-unnecessary-condition` disables
+  on runtime guards for untyped callers (follow-up slice 1).
 
 ## 3. Default quality gate
 
@@ -168,7 +167,7 @@ tflint), YAML (yamllint) and Markdown (markdownlint) count as covered; gitleaks,
 
 ## 6. Follow-up slices (one per engine group, in order)
 
-1. Clean up the five migration-debt rules in this repository and re-enable them.
+1. Clean up the five migration-debt rules in this repository and re-enable them. **Done.**
 2. Python: Ruff and mypy adapters (RRDSCRUM-187). **Done:** Ruff 0.17.4 runs
    from a bundled isolated config and is sha256-pinned; mypy is reported
    `skipped: needs dependency environment` (see `docs/scanner-licensing.md`).

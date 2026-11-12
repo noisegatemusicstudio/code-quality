@@ -76,8 +76,8 @@ export function correlateDependencyFindings(
       clusters.push([item, ...hits.flat()]);
     }
     for (const cluster of clusters) {
-      const first = cluster[0]?.finding;
-      if (!first) continue;
+      // Every cluster is created with at least one item.
+      const first = cluster[0].finding;
       issues.push({
         package: { ...first.package },
         advisoryIds: [...new Set(cluster.flatMap((c) => c.ids))].sort(byText),

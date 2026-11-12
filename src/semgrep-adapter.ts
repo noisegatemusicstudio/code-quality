@@ -131,8 +131,7 @@ function cweIds(metadata: Record<string, unknown>): string[] {
   const ids = new Set<string>();
   for (const entry of raw)
     if (typeof entry === 'string')
-      for (const m of entry.matchAll(/CWE-(\d{1,5})/gi))
-        ids.add(`CWE-${m[1] ?? ''}`);
+      for (const m of entry.matchAll(/CWE-(\d{1,5})/gi)) ids.add(`CWE-${m[1]}`);
   return [...ids].sort((a, b) => a.localeCompare(b, 'en'));
 }
 
@@ -295,7 +294,8 @@ export function parseSemgrepReport(stdout: string): SemgrepParsedOutput {
 export function semgrepRefusal(
   options: SemgrepOptions,
 ): { refusal: SemgrepRefusal; message: string } | undefined {
-  const r = options?.ruleset;
+  const input: unknown = options;
+  const r = isRecord(input) ? input.ruleset : undefined;
   if (
     !isRecord(options) ||
     !isRecord(r) ||
@@ -396,7 +396,7 @@ export async function runSemgrepScan(
       ...request.scope,
       engine: { id: 'semgrep', version: semgrepVersion },
       rulesetVersion: isEnvelopeVersion(
-        `${options?.ruleset?.source}-${options?.ruleset?.version}`,
+        `${options.ruleset.source}-${options.ruleset.version}`,
       )
         ? `${options.ruleset.source}-${options.ruleset.version}`
         : 'unapproved',

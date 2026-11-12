@@ -26,7 +26,9 @@ const git = systemGit(
   process.env.CODE_QUALITY_GIT_EXECUTABLE,
 );
 const repo = mkdtempSync(join(tmpdir(), 'new-code-'));
-process.on('exit', () => rmSync(repo, { recursive: true, force: true }));
+process.on('exit', () => {
+  rmSync(repo, { recursive: true, force: true });
+});
 const run = (...args: string[]): string =>
   execFileSync(git, ['-C', repo, ...args], { encoding: 'utf8' }).trim();
 const put = (name: string, lines: string[]): void => {
@@ -39,7 +41,7 @@ const mkdirSyncFor = (name: string): void => {
 const numbered = (n: number, tag = 'a'): string[] =>
   Array.from(
     { length: n },
-    (_, i) => `export const ${tag}${i + 1} = ${i + 1};`,
+    (_, i) => `export const ${tag}${String(i + 1)} = ${String(i + 1)};`,
   );
 
 run('init', '-q', '-b', 'main');
@@ -119,21 +121,24 @@ const base0 = {
   baseRef: base,
   tracked,
 };
-const measure = (m: Awaited<ReturnType<typeof computeNewCode>>, id: string) =>
-  m.measures.find((x) => x.id === id)!;
+const measure = (m: Awaited<ReturnType<typeof computeNewCode>>, id: string) => {
+  const found = m.measures.find((x) => x.id === id);
+  assert.ok(found, `missing measure ${id}`);
+  return found;
+};
 
 await test('diff: changed lines per file match the fixture exactly', async () => {
   const diff = await changedLinesDiff(git, repo, base, head);
   assert.ok(diff);
   const byPath = Object.fromEntries(diff.files.map((f) => [f.path, f]));
-  assert.deepEqual(byPath['src/a.ts']?.lines, [3, 11, 12, 13, 14]);
-  assert.deepEqual(byPath['src/new.ts']?.lines, [1, 2, 3, 4, 5]);
-  assert.equal(byPath['src/new.ts']?.status, 'added');
-  assert.equal(byPath['src/old.ts']?.status, 'deleted');
-  assert.deepEqual(byPath['src/old.ts']?.lines, []);
-  assert.equal(byPath['src/r2.ts']?.status, 'renamed');
-  assert.equal(byPath['src/r2.ts']?.oldPath, 'src/r.ts');
-  assert.deepEqual(byPath['src/r2.ts']?.lines, [2]);
+  assert.deepEqual(byPath['src/a.ts'].lines, [3, 11, 12, 13, 14]);
+  assert.deepEqual(byPath['src/new.ts'].lines, [1, 2, 3, 4, 5]);
+  assert.equal(byPath['src/new.ts'].status, 'added');
+  assert.equal(byPath['src/old.ts'].status, 'deleted');
+  assert.deepEqual(byPath['src/old.ts'].lines, []);
+  assert.equal(byPath['src/r2.ts'].status, 'renamed');
+  assert.equal(byPath['src/r2.ts'].oldPath, 'src/r.ts');
+  assert.deepEqual(byPath['src/r2.ts'].lines, [2]);
 });
 
 await test('diff parser refuses quoted paths instead of guessing', () => {
@@ -150,7 +155,6 @@ await test('coverage: a known percentage passes and a low one fails the 80% thre
   });
   const lines = measure(pass, 'coverage.lines');
   assert.equal(lines.state, 'known');
-  assert.ok(lines.state === 'known');
   assert.equal(lines.numerator, 10);
   assert.equal(lines.denominator, 11);
   const fail = await computeNewCode({
@@ -310,10 +314,14 @@ await test('base selection: pushes need a base ref; pull requests use their even
 });
 
 await test('CLI: --base-ref and --coverage reach report.json, summary.md and the manifest', () => {
-  const out = join(repo, '..', `new-code-out-${process.pid}`);
-  process.on('exit', () => rmSync(out, { recursive: true, force: true }));
-  const coverage = join(out, '..', `cov-${process.pid}.json`);
-  process.on('exit', () => rmSync(coverage, { force: true }));
+  const out = join(repo, '..', `new-code-out-${String(process.pid)}`);
+  process.on('exit', () => {
+    rmSync(out, { recursive: true, force: true });
+  });
+  const coverage = join(out, '..', `cov-${String(process.pid)}.json`);
+  process.on('exit', () => {
+    rmSync(coverage, { force: true });
+  });
   writeFileSync(coverage, coverageFinal());
   const env = {
     PATH: process.env.PATH ?? '',
@@ -348,7 +356,7 @@ await test('CLI: --base-ref and --coverage reach report.json, summary.md and the
   assert.equal(report.newCode.baseSha, base);
   const lines = report.newCode.measures.find((m) => m.id === 'coverage.lines');
   assert.equal(lines?.state, 'known');
-  assert.equal(lines?.denominator, 11);
+  assert.equal(lines.denominator, 11);
   const summary = readFileSync(join(out, 'summary.md'), 'utf8');
   assert.match(summary, /### New-code measures/);
   assert.match(summary, /coverage\.lines \| 90\.91% \| 10\/11/);
@@ -410,5 +418,5 @@ await test('manifest carries the new-code measures, and null when none were comp
     denominator: 10,
     reason: null,
   });
-  assert.equal(m?.[1]?.reason, 'no-report');
+  assert.equal(m[1]?.reason, 'no-report');
 });

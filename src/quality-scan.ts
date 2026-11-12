@@ -270,7 +270,7 @@ export function decide(
   if (broken.length) reasons.push(`failed or incomplete: ${broken.join(', ')}`);
   if (blocking)
     reasons.push(
-      `${blocking} finding(s) at or above ${options.failOnSeverity}`,
+      `${String(blocking)} finding(s) at or above ${options.failOnSeverity}`,
     );
   const wouldFail = reasons.length > 0;
   return {
@@ -389,7 +389,7 @@ const topRules = (
   return [...counts]
     .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0], 'en'))
     .slice(0, count)
-    .map(([rule, n]) => `${mdEscape(rule)} (${n})`)
+    .map(([rule, n]) => `${mdEscape(rule)} (${String(n)})`)
     .join(', ');
 };
 
@@ -437,12 +437,12 @@ export function renderSummary(input: {
     const notes = [
       r.status === 'skipped' && r.skipKind ? `skipped (${r.skipKind})` : '',
       r.reason ? mdEscape(r.reason) : '',
-      r.excepted ? `${r.excepted} excepted (reviewed exception)` : '',
+      r.excepted ? `${String(r.excepted)} excepted (reviewed exception)` : '',
     ]
       .filter(Boolean)
       .join(': ');
     lines.push(
-      `| ${r.engine}${r.version ? ` ${mdEscape(r.version)}` : ''} | ${r.status} | ${ran ? `${r.findings.length}${r.status === 'incomplete' ? '+' : ''}` : '–'} | ${fresh ? fresh.length : '–'} | ${notes} |`,
+      `| ${r.engine}${r.version ? ` ${mdEscape(r.version)}` : ''} | ${r.status} | ${ran ? `${String(r.findings.length)}${r.status === 'incomplete' ? '+' : ''}` : '–'} | ${String(fresh ? fresh.length : '–')} | ${notes} |`,
     );
   }
   const ex = input.exceptions;
@@ -505,7 +505,7 @@ export function renderSummary(input: {
       '| --- | --- | --- |',
       ...nc.measures.map(
         (m) =>
-          `| ${m.id} | ${m.state === 'known' ? `${(Math.round((m.percent ?? 0) * 100) / 100).toString()}%` : `unknown: ${mdEscape(unknownText(m.reason ?? ''))}`} | ${m.state === 'known' ? `${m.numerator}/${m.denominator}` : '–'} |`,
+          `| ${m.id} | ${m.state === 'known' ? `${(Math.round((m.percent ?? 0) * 100) / 100).toString()}%` : `unknown: ${mdEscape(unknownText(m.reason ?? ''))}`} | ${m.state === 'known' ? `${String(m.numerator)}/${String(m.denominator)}` : '–'} |`,
       ),
     );
   }

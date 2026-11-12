@@ -24,7 +24,7 @@ export const approvedVersions = Object.freeze({
 export const eslintConfigVersion = 'bundled-1';
 const supportedExtensions = ['.js', '.mjs', '.cjs', '.ts', '.mts', '.cts'];
 const excluded =
-  /(?:^|\/)(?:node_modules|dist|build|coverage|vendor)\/|\.min\.js$/;
+  /(?:(?:^|\/)(?:node_modules|dist|build|coverage|vendor)\/|\.min\.js$)/;
 /** Customer ESLint configuration is never executed; its presence is refused. */
 const customerConfig =
   /^(?:eslint\.config\.[cm]?[jt]s|\.eslintrc(?:\.[a-z]+)?|\.eslintignore)$/;
@@ -84,7 +84,7 @@ export function classifyFiles(paths: readonly string[]): {
     excluded: [] as string[],
     customerConfig: [] as string[],
   };
-  for (const p of [...paths].sort()) {
+  for (const p of [...paths].sort((a, b) => a.localeCompare(b, 'en'))) {
     if (customerConfig.test(basename(p))) out.customerConfig.push(p);
     else if (excluded.test(p)) out.excluded.push(p);
     else if (supportedExtensions.includes(extname(p))) out.supported.push(p);
@@ -263,7 +263,9 @@ export async function runEslintScan(
     lintedFiles: collected.lintedFiles,
     unsupportedFiles: limit(classes.unsupported),
     excludedFiles: limit(classes.excluded),
-    parseFailures: limit(collected.parseFailures.sort()),
+    parseFailures: limit(
+      [...collected.parseFailures].sort((a, b) => a.localeCompare(b, 'en')),
+    ),
     truncated:
       classes.unsupported.length > listLimit ||
       classes.excluded.length > listLimit ||

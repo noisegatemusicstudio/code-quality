@@ -16,9 +16,10 @@ await test('Git version gate accepts 2.47+ and rejects older or malformed Git', 
 });
 
 await test('unsupported Git yields an actionable requirement message', () => {
-  assert.throws(
-    () => assertGitVersion('git version 2.43.0\n', '/usr/bin/git'),
-    /Git >= 2\.47.*\/usr\/bin\/git.*2\.43\.0.*CODE_QUALITY_GIT_EXECUTABLE/s,
-  );
-  assert.doesNotThrow(() => assertGitVersion('git version 2.47.1\n', 'g'));
+  assert.throws(() => {
+    assertGitVersion('git version 2.43.0\n', '/usr/bin/git');
+  }, /Git >= 2\.47.*\/usr\/bin\/git.*2\.43\.0.*CODE_QUALITY_GIT_EXECUTABLE/s);
+  assert.doesNotThrow(() => {
+    assertGitVersion('git version 2.47.1\n', 'g');
+  });
 });

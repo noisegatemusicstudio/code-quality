@@ -1,4 +1,5 @@
 import type { AdapterEnvelope, AdapterFinding } from './adapter-envelope.js';
+import { renderLanguages, type LanguageReport } from './language-detection.js';
 
 /** Engines the reusable `quality-scan` workflow can run, in report order. */
 export const engineIds = [
@@ -270,12 +271,14 @@ export function buildReport(input: {
   repository: string;
   results: readonly EngineResult[];
   decision: Decision;
+  languages?: readonly LanguageReport[];
 }): unknown {
   return {
     schemaVersion: 1,
     repository: input.repository,
     commitSha: input.commitSha,
     decision: input.decision,
+    languages: input.languages ?? [],
     engines: input.results.map((r) => ({
       engine: r.engine,
       status: r.status,
@@ -315,6 +318,7 @@ export function renderSummary(input: {
   results: readonly EngineResult[];
   decision: Decision;
   baseline: Baseline | null;
+  languages?: readonly LanguageReport[];
 }): string {
   const { results, decision, baseline } = input;
   const lines: string[] = [
@@ -343,6 +347,7 @@ export function renderSummary(input: {
       `| ${r.engine}${r.version ? ` ${mdEscape(r.version)}` : ''} | ${r.status} | ${ran ? `${r.findings.length}${r.status === 'incomplete' ? '+' : ''}` : '–'} | ${fresh ? fresh.length : '–'} | ${notes} |`,
     );
   }
+  lines.push('', ...renderLanguages(input.languages ?? []));
   const notClean = results.filter((r) => r.status !== 'completed');
   if (notClean.length) {
     lines.push(

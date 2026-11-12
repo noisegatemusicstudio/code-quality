@@ -122,3 +122,30 @@ Sources: dated captures (2026-11-12, 07:41 UTC) of the [Rules License](https://s
 - Not usable: CodeQL, Gitleaks Action, Semgrep-maintained rules. RRDSCRUM-133 (SAST engines and licensed rules) must start from our own rules or a separately licensed pack.
 - No Sonar analyzer is embeddable; ReleaseReady's own Sonar work stays under RRDPLAT-22/29.
 - Re-check versions and licences at integration time; this table is a dated snapshot.
+
+## Language-profile engines (reviewed 2026-11-12, not installed or run)
+
+Candidates for the slices in `docs/language-profiles.md`. Licence = first lines of
+the upstream `LICENSE`; versions are latest stable tags, not pins. All are run as
+separate, unbundled binaries; nothing is redistributed.
+
+| Engine              | Version         | Licence                                                 | Recommendation                                  |
+| ------------------- | --------------- | ------------------------------------------------------- | ----------------------------------------------- |
+| Ruff                | 0.17.4          | MIT                                                     | **Proceed**                                     |
+| mypy / pyright      | 2.4.1 / 1.1.414 | MIT / MIT                                               | **Proceed**                                     |
+| PMD                 | 7.29.0          | BSD-style                                               | **Proceed** (keep notice)                       |
+| Checkstyle          | 14.4.0          | LGPL-2.1                                                | Internal **proceed**; customer **needs review** |
+| SpotBugs            | 4.10.5          | LGPL-2.1                                                | Internal **proceed**; customer **needs review** |
+| FindSecBugs         | 1.14.0          | LGPL-3.0                                                | Internal **proceed**; customer **needs review** |
+| detekt              | 1.23.8          | Apache-2.0                                              | **Proceed**                                     |
+| ktlint              | 1.8.0           | MIT                                                     | **Proceed**                                     |
+| SwiftLint           | 0.65.1          | MIT                                                     | **Proceed**                                     |
+| ShellCheck          | 0.11.0          | GPL-3.0                                                 | Internal **proceed**; customer **needs review** |
+| shfmt               | 3.14.1          | BSD-3-Clause                                            | **Proceed**                                     |
+| hadolint            | 2.15.1          | GPL-3.0                                                 | Internal **proceed**; customer **needs review** |
+| tflint              | 0.66.0          | MPL-2.0                                                 | **Proceed** (unmodified, keep notice)           |
+| actionlint          | 1.7.12          | MIT                                                     | **Proceed**                                     |
+| zizmor              | 1.32.0          | MIT                                                     | **Proceed**                                     |
+| yamllint            | 1.38.0          | GPL-3.0                                                 | Internal **proceed**; customer **needs review** |
+| markdownlint / cli2 | 0.42.1 / 0.24.1 | MIT                                                     | **Proceed**                                     |
+| Prettier            | 3.9.10          | MIT (package metadata; upstream LICENSE not re-fetched) | **Proceed**                                     |

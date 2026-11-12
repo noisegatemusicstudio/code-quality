@@ -214,7 +214,7 @@ await test('reusable workflow: workflow_call, read-only permissions, no secrets,
   );
   assert.match(text, /^on:\n {2}workflow_call:/m);
   assert.match(text, /^permissions:\n {2}contents: read\n/m);
-  assert.equal(/secrets\./.test(text), false);
+  assert.equal(text.includes('secrets.'), false);
   assert.equal(/^\s+secrets:/m.test(text), false);
   assert.equal(/\bwrite\b/.test(text.replace(/--write/g, '')), false);
   for (const input of [

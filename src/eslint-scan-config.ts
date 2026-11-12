@@ -6,6 +6,13 @@ import tseslint from 'typescript-eslint';
  * Approved bundled configuration for hosted scans. It is data only: no customer
  * config, plugin or type information is loaded, so it needs no TypeScript
  * project. Inline `eslint-*` comments cannot change or hide rules.
+ *
+ * Limitation: hosted scans run ESLint `recommended` plus the syntax-only
+ * typescript-eslint `strict` and `stylistic` sets. The type-aware
+ * `strict-type-checked` / `stylistic-type-checked` rules need the caller's
+ * tsconfig and run in the caller's own lint through `qualityConfig`
+ * (`@releaseready/code-quality/eslint`), which reads tsconfig without
+ * executing project code. See docs/language-profiles.md.
  */
 export const scanFiles = [
   '**/*.js',
@@ -40,7 +47,7 @@ export default defineConfig(
   },
   {
     files: ['**/*.ts', '**/*.mts', '**/*.cts'],
-    extends: [tseslint.configs.recommended],
+    extends: [tseslint.configs.strict, tseslint.configs.stylistic],
   },
   {
     files: ['**/*.js', '**/*.mjs', '**/*.ts', '**/*.mts'],

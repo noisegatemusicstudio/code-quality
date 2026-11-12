@@ -350,9 +350,7 @@ export function classifyGitleaksEnvelope(
   for (const f of envelope.findings) {
     const hit = valid.get(f.fingerprint);
     const matches =
-      hit !== undefined &&
-      hit.exception.ruleId === f.ruleId &&
-      hit.exception.path === f.path;
+      hit?.exception.ruleId === f.ruleId && hit.exception.path === f.path;
     if (matches) used.add(f.fingerprint);
     if (matches && hit.end > today) {
       counts.excepted++;

@@ -175,6 +175,38 @@ or runs lifecycle scripts. This is not a hostile-code or network-enforced sandbo
 the engine must be trusted, and the Linux-only supervisor applies as in
 committed-source scans.
 
+### Gitleaks CLI adapter
+
+`createGitleaksAdapter` (`/gitleaks-adapter`) defines a `ScannerAdapter` for the
+pinned, approved Gitleaks CLI (v8.30.1, MIT; `gitleaks-action` is not used and its
+licence terms do not apply). Modes are `working-tree` (`dir .` over the adapter
+workspace) and `commit-range` (`git` over a caller-prepared clone at an absolute
+`repoPath`, limited to `base..head` with 40-character commits; `head` is the scoped
+commit). The arguments are fixed and callers can pass none: the report goes to
+stdout, `--redact` is always on, inline `gitleaks:allow` comments are ignored, and
+the rule config and ignore file are the trusted absolute paths you supply, so a
+scanned repository cannot supply or widen its own allowlist. The returned
+`record` stores the exact mode, engine version and range. Set `shallow: true` for
+a shallow or incomplete clone: the envelope is then `incomplete` with reason
+`incomplete-history`.
+
+`parseGitleaksReport` reads only `RuleID`, `File` and the line/column fields.
+`Secret`, `Match` and every other field are never copied to findings, errors or
+fingerprints. If a `Secret` is not the redaction placeholder the whole report is
+rejected (`failed`/`invalid-output`). A finding's fingerprint is derived from rule,
+path and location only (no secret-derived value, so it changes when a line moves).
+Exit code 2 (leaks found) is a result; any other non-zero exit is `failed`.
+
+`classifyGitleaksEnvelope` separates reviewed exceptions from failures. An
+exception names one exact fingerprint plus its rule and path, a reviewer, a reason
+and `reviewedAt`/`expiresAt` dates at most 90 days apart; there are no wildcards.
+Expired, malformed or mismatched entries are rejected and never applied, and an
+expired exception makes the finding active again. The result reports active,
+excepted, new/existing (against a baseline of known fingerprints), expired,
+rejected and unused counts. A `failed` or `skipped` scan stays failed regardless
+of exceptions. Secrets are never validated, used or rotated, and no repository is
+edited. Cloning the history, storing baselines and review workflows are future work.
+
 Future work, out of scope here: authenticated, idempotent central upload;
 recorded redistribution and hosted-use approvals per engine; network-enforced
 isolation; baseline comparison of fingerprints across runs.

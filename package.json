@@ -25,7 +25,8 @@
     "./coverage-import": "./dist/src/coverage-import.js",
     "./customer-scan": "./dist/src/customer-scan.js",
     "./adapter-envelope": "./dist/src/adapter-envelope.js",
-    "./scanner-adapter": "./dist/src/scanner-adapter.js"
+    "./scanner-adapter": "./dist/src/scanner-adapter.js",
+    "./gitleaks-adapter": "./dist/src/gitleaks-adapter.js"
   },
   "scripts": {
     "build": "tsc && node dist/src/build-assets.js",

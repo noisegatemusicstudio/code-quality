@@ -1,0 +1,71 @@
+{
+  "duplicates": [
+    {
+      "firstFile": {
+        "end": 11,
+        "endLoc": {
+          "column": 1,
+          "line": 11,
+          "position": 229
+        },
+        "name": "src/a.ts",
+        "start": 1,
+        "startLoc": {
+          "column": 0,
+          "line": 1,
+          "position": 0
+        }
+      },
+      "format": "typescript",
+      "fragment": "export function total(items: number[]): number {\n  let sum = 0;\n  for (const item of items) {\n    if (item > 0) {\n      sum += item * 2;\n    }\n    sum -= 1;\n  }\n  console.log('computed total', sum);\n  return sum + items.length;\n}",
+      "isNew": false,
+      "kind": "exact",
+      "lines": 11,
+      "secondFile": {
+        "end": 12,
+        "endLoc": {
+          "column": 1,
+          "line": 12,
+          "position": 239
+        },
+        "name": "src/b.ts",
+        "start": 2,
+        "startLoc": {
+          "column": 0,
+          "line": 2,
+          "position": 10
+        }
+      },
+      "tokens": 62
+    }
+  ],
+  "statistics": {
+    "detectionDate": "2026-11-12T00:00:00.000Z",
+    "formats": {
+      "typescript": {
+        "clones": 1,
+        "duplicatedLines": 11,
+        "duplicatedTokens": 62,
+        "lines": 33,
+        "newClones": 0,
+        "newDuplicatedLines": 0,
+        "percentage": 33.33333333333333,
+        "percentageTokens": 28.054298642533936,
+        "sources": 3,
+        "tokens": 221
+      }
+    },
+    "total": {
+      "clones": 1,
+      "duplicatedLines": 11,
+      "duplicatedTokens": 62,
+      "lines": 33,
+      "newClones": 0,
+      "newDuplicatedLines": 0,
+      "percentage": 33.33333333333333,
+      "percentageTokens": 28.054298642533936,
+      "sources": 3,
+      "tokens": 221
+    }
+  }
+}

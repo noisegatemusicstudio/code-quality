@@ -318,6 +318,11 @@ export function renderSummary(input: {
   results: readonly EngineResult[];
   decision: Decision;
   baseline: Baseline | null;
+  exceptions?: {
+    source: 'base-commit' | 'scanned-commit';
+    pending: readonly { fingerprint: string; ruleId: string; path: string }[];
+    pendingError?: string;
+  };
   languages?: readonly LanguageReport[];
 }): string {
   const { results, decision, baseline } = input;
@@ -346,6 +351,21 @@ export function renderSummary(input: {
     lines.push(
       `| ${r.engine}${r.version ? ` ${mdEscape(r.version)}` : ''} | ${r.status} | ${ran ? `${r.findings.length}${r.status === 'incomplete' ? '+' : ''}` : '–'} | ${fresh ? fresh.length : '–'} | ${notes} |`,
     );
+  }
+  const ex = input.exceptions;
+  if (ex?.source === 'base-commit') {
+    lines.push(
+      '',
+      'Exceptions: read from the pull request base commit only; exceptions added in this pull request take effect after merge.',
+    );
+    if (ex.pending.length || ex.pendingError) {
+      lines.push('', '### Exceptions pending review', '');
+      if (ex.pendingError) lines.push(`- ${mdEscape(ex.pendingError)}`);
+      for (const e of ex.pending)
+        lines.push(
+          `- \`${mdEscape(e.ruleId)}\` in \`${mdEscape(e.path)}\` (${mdEscape(e.fingerprint.slice(0, 19))}…): added or changed in this pull request, not suppressing anything yet`,
+        );
+    }
   }
   lines.push('', ...renderLanguages(input.languages ?? []));
   const notClean = results.filter((r) => r.status !== 'completed');

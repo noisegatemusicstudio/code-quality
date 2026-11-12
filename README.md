@@ -349,10 +349,18 @@ technical-debt estimate or composite score (`measuresNotProvided` lists them).
 - `/duplication`: `jscpdAdapter(executable)` is a `runAdapter` definition (jscpd
   5.4.3, strict mode, 5 lines/50 tokens, no gitignore, empty caller allowlist;
   each clone becomes two findings, one per side). `parseJscpdReport` reads a
-  recorded jscpd JSON report: clone locations on both sides, per-file line counts,
-  totals, exclusions and the pinned config. The numerator is distinct duplicated
-  lines, which can be lower than jscpd's own `duplicatedLines` (it sums clone
-  sizes).
+  recorded jscpd JSON report: clone locations on both sides and the pinned
+  config. The real 5.4.3 report has no per-file line counts, so the caller
+  supplies `lineCount` (the adapter counts lines in the committed snapshot) for
+  every file a clone names. The numerator is distinct duplicated lines from the
+  clone locations (lower than jscpd's own `duplicatedLines`, which sums clone
+  sizes). jscpd does not list clone-free files, so the denominator is the
+  report's `statistics.total.lines`, accepted only if the format totals agree and
+  the snapshot counts of the clone files fit inside it; the method is recorded
+  as `counting` in the measure's provenance. jscpd 5.4.3 does not name clone-free
+  or skipped files, so they cannot be itemised and no analysed-file list is
+  guessed; a failed cross-check fails closed (`invalid`). A scope with exclusions is
+  `unsupported`, because the report-wide denominator cannot be scoped.
 - `/quality-measures`: `buildQualityMeasures`, `newCodeMeasures`,
   `overallMeasures` and `evaluateThreshold` produce the typed, versioned
   (`schemaVersion: 1`) output.
@@ -513,6 +521,13 @@ rule and path; no wildcards) and needs `reviewedBy`, `reviewedAt`, `expiresAt`
 never apply. Excepted findings leave the finding count, are counted as
 `excepted` in the summary, and stay in the envelope. A malformed file stops the
 run with exit 2.
+
+On `pull_request` events the file is read from the PR's **base commit** only, so
+a PR cannot exempt its own findings: a new or changed exception takes effect
+after it is merged. Entries the PR adds or changes are listed in the job
+summary under "Exceptions pending review". If the base commit cannot be
+determined the run stops with exit 2 (fail closed). On `push` events the pushed
+commit's file is used.
 
 ### `code-quality-results` artifact (stable portal contract)
 

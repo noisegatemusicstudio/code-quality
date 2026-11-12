@@ -293,6 +293,7 @@ export interface QualityMeasures {
       excluded: string[];
       notAnalyzed: string[];
       cloneCount: number;
+      counting: DuplicationDetail['counting'];
     } | null;
     newCode: { referenceCommitSha: string; headCommitSha: string } | null;
   };
@@ -337,6 +338,7 @@ export function buildQualityMeasures(input: {
             excluded: d.excluded,
             notAnalyzed: d.notAnalyzed,
             cloneCount: d.cloneCount,
+            counting: d.counting,
           },
       newCode: !newCode
         ? null

@@ -1,0 +1,7 @@
+{
+  "src/a.ts": "export function total(items: number[]): number {\n  let sum = 0;\n  for (const item of items) {\n    if (item > 0) {\n      sum += item * 2;\n    }\n    sum -= 1;\n  }\n  console.log('computed total', sum);\n  return sum + items.length;\n}\nexport const tail = 1;\n",
+  "src/b.ts": "// header\nexport function total(items: number[]): number {\n  let sum = 0;\n  for (const item of items) {\n    if (item > 0) {\n      sum += item * 2;\n    }\n    sum -= 1;\n  }\n  console.log('computed total', sum);\n  return sum + items.length;\n}\n",
+  "src/c.ts": "export const only = 1;\n",
+  "src/d.ts": "export class Unique {\n  private readonly values = new Map<string, number>();\n  add(key: string, value: number): void {\n    this.values.set(key, (this.values.get(key) ?? 0) + value);\n  }\n  report(): string[] {\n    return [...this.values].map(([k, v]) => `${k}=${v}`);\n  }\n}\n",
+  "src/e.py": "# py\n"
+}

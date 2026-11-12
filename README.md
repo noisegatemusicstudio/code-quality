@@ -373,7 +373,7 @@ and a changed line beyond an analyzed file's length is a `diff-mismatch`.
 Limits: coverage and duplication data are unverified customer inputs. jscpd covers
 its supported formats only, finds token-level (not semantic) clones, skips files
 below its thresholds, and has no generated-code detection: exclude generated code
-by pattern, or it counts. A `jscpd: ignore` marker in source limits what a real
+by pattern, or it counts. A jscpd ignore directive in any committed file limits what a real
 scan covers. Istanbul exclusions applied at collection time are invisible in the
 report. The adapter's `parse` expects the JSON report on stdout, but jscpd's JSON
 reporter writes a file, and that wiring was not verified against a real jscpd.
@@ -463,7 +463,7 @@ The job needs `contents: read` and no secrets.
 
 ```yaml
 # .github/workflows/quality.yml in the caller repository
-on: { pull_request: {}, push: { branches: [main] } }
+on: [push, pull_request]
 permissions: { contents: read }
 jobs:
   quality:
@@ -481,16 +481,72 @@ jobs:
 - Inputs: `enforce` (default `false`), `node-version` (default `22.23.4`),
   `scanners` (comma list or `all`; engines with nothing to scan are skipped),
   `fail-on-severity` (default `high`), `baseline-path` (optional `report.json`
-  from an earlier run, enabling the new-vs-baseline column).
+  from an earlier run, enabling the new-vs-baseline column), `osv-mode` (see
+  below).
 - Output: a Markdown job summary (counts per engine; skipped, failed and
-  incomplete engines are listed and never shown as clean) and a `quality-scan`
-  artefact with `report.json`, `summary.md` and per-engine `envelopes/`.
+  incomplete engines are listed and never shown as clean) and a
+  `code-quality-results` artifact, described below.
 - Enforce mode fails when any engine is failed or incomplete, or a finding is at
   or above `fail-on-severity`. Skipped engines do not fail it but are always
   shown with their reason.
 
-Known limits: OSV is skipped because the offline adapter needs a permitted
-advisory database that is not provisioned yet. Gitleaks and jscpd use the
+### OSV mode and data disclosure
+
+`osv-mode` is `online` (default), `offline` or `off`. **Online sends package
+names, versions and ecosystems from each lockfile to the OSV API** (never source
+code); the job summary lists this under "Data sent off the runner". Customers
+who do not want that choose `off`. `offline` needs a caller-supplied advisory
+database that is not provisioned, so OSV is reported `skipped`. Online use by the
+customer is allowed by [docs/scanner-licensing.md](docs/scanner-licensing.md).
+
+### Reviewed exceptions
+
+`quality-exceptions.json` in the scanned repository may hold
+`{ "gitleaks": [ ... ] }`. Each entry matches one exact finding (fingerprint,
+rule and path; no wildcards) and needs `reviewedBy`, `reviewedAt`, `expiresAt`
+(at most 90 days later) and `reason`. Expired, over-long or malformed entries
+never apply. Excepted findings leave the finding count, are counted as
+`excepted` in the summary, and stay in the envelope. A malformed file stops the
+run with exit 2.
+
+### `code-quality-results` artifact (stable portal contract)
+
+The workflow uploads the artifact `code-quality-results` with 90-day retention
+on every run (`if: !cancelled()`), so the ReleaseReady portal can pull it with a
+read-only token. Layout:
+
+```text
+manifest.json     identity and per-engine index (below)
+report.json       decision and all findings (also usable as a baseline)
+summary.md        the job summary text
+envelopes/<engine>.json   validated adapter envelope, only for engines that produced one
+```
+
+`manifest.json` is built by the CLI from `GITHUB_*` variables with strict
+validation; a missing or malformed value fails the run instead of being
+guessed. Fields (`schemaVersion` 1):
+
+| Field                 | Type                     | Source                                                                |
+| --------------------- | ------------------------ | --------------------------------------------------------------------- |
+| `schemaVersion`       | `1`                      | constant; bumped on any breaking change                               |
+| `repository`          | `owner/name`             | `GITHUB_REPOSITORY`                                                   |
+| `commitSha`           | 40 hex                   | scanned commit, must equal `GITHUB_SHA`                               |
+| `ref`                 | string                   | `GITHUB_REF` (`refs/heads/..`, `refs/tags/..` or `refs/pull/N/merge`) |
+| `event`               | `push` \| `pull_request` | `GITHUB_EVENT_NAME`; other events are rejected                        |
+| `pullRequest`         | number \| `null`         | from the merge ref; `null` for push                                   |
+| `runId`, `runAttempt` | positive integers        | `GITHUB_RUN_ID`, `GITHUB_RUN_ATTEMPT`                                 |
+| `workflowRef`         | string                   | `GITHUB_WORKFLOW_REF`                                                 |
+| `codeQualityRef`      | 40 hex                   | the pinned scanner commit (`code-quality-ref`)                        |
+| `engines[]`           | list                     | one entry per engine, below                                           |
+
+Each `engines[]` entry: `id` (`eslint`, `gitleaks`, `osv`, `trivy`, `semgrep`,
+`jscpd`), `version` (string or `null`), `status` (`completed`, `incomplete`,
+`failed` or `skipped`), `reason` (string or `null`), `findingCount` (after
+exceptions), `exceptedCount`, and `envelope` (artifact-relative path or `null`).
+Treat anything other than `completed` as "not clean". Additive fields may
+appear within a `schemaVersion`; consumers must ignore unknown fields.
+
+Known limits: Gitleaks and jscpd use the
 committed-snapshot API, so they need a full-history checkout, Git 2.47 or newer,
 and stay within its size bounds (otherwise they report `failed`). A project's own
 ESLint config is ignored; the bundled rules run instead.

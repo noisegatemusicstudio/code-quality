@@ -1,0 +1,13 @@
+{
+  "gitleaks": [
+    {
+      "fingerprint": "sha256:b79efe4d6d8734bd296424b038d802656d3cae5c31a023eb077825c05adab579",
+      "ruleId": "aws-access-token",
+      "path": "tests/adapter-envelope.test.ts",
+      "reviewedBy": "ReleaseReady owner decision of 2026-11-12 (agent-prepared, pending founder review)",
+      "reviewedAt": "2026-11-12",
+      "expiresAt": "2027-02-10",
+      "reason": "Synthetic, non-functional AWS-style key used as a redaction fixture in a unit test; no real credential. Exact fingerprint, rule and path; no wildcard."
+    }
+  ]
+}

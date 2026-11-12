@@ -7,13 +7,17 @@ import {
   decide,
   isSeverity,
   parseBaseline,
+  parseOsvMode,
   parseScanners,
   renderSummary,
   type EngineResult,
 } from './quality-scan.js';
+import { buildManifest, ManifestError } from './quality-manifest.js';
 import {
+  applyGitleaksExceptions,
   installEngine,
   installableEngines,
+  parseExceptions,
   runEngines,
   scopeFromEnvironment,
 } from './quality-scan-run.js';
@@ -67,7 +71,28 @@ async function run(args: string[]): Promise<number> {
     );
     return 2;
   }
+  const osvMode = parseOsvMode(option(args, 'osv-mode'));
+  if (!osvMode) {
+    process.stderr.write(
+      'invalid input: osv-mode must be online, offline or off\n',
+    );
+    return 2;
+  }
   const enforce = option(args, 'enforce') === 'true';
+  // Reviewed, time-bounded gitleaks exceptions live in the scanned repository.
+  const exceptionsFile = resolve(
+    repo,
+    option(args, 'exceptions') ?? 'quality-exceptions.json',
+  );
+  let exceptions: ReturnType<typeof parseExceptions> = [];
+  try {
+    exceptions = parseExceptions(await readFile(exceptionsFile, 'utf8'));
+  } catch (error) {
+    if ((error as { code?: string }).code !== 'ENOENT') {
+      process.stderr.write('invalid input: exceptions file is malformed\n');
+      return 2;
+    }
+  }
   let installed: {
     tools?: Record<string, string>;
     errors?: Record<string, string>;
@@ -93,7 +118,7 @@ async function run(args: string[]): Promise<number> {
   const gitExecutable = (
     await exec('sh', ['-c', 'command -v git'])
   ).stdout.trim();
-  const results: EngineResult[] = await runEngines({
+  const scanned: EngineResult[] = await runEngines({
     repo,
     scope: scopeFromEnvironment(process.env, commitSha),
     selected,
@@ -103,7 +128,12 @@ async function run(args: string[]): Promise<number> {
     rulesDirectory: resolve(
       option(args, 'rules') ?? join(repo, 'rules/semgrep'),
     ),
+    osvMode,
   });
+  const now = new Date();
+  const results = scanned.map((r) =>
+    applyGitleaksExceptions(r, exceptions, now),
+  );
   let baseline = null;
   const baselinePath = option(args, 'baseline');
   if (baselinePath) {
@@ -134,16 +164,38 @@ async function run(args: string[]): Promise<number> {
       2,
     ),
   );
+  const envelopeFiles = new Map<string, string>();
   for (const r of results)
-    if (r.envelope)
+    if (r.envelope) {
+      envelopeFiles.set(r.engine, `envelopes/${r.engine}.json`);
       await writeFile(
-        join(out, 'envelopes', `${r.engine}.json`),
+        join(out, envelopeFiles.get(r.engine) ?? ''),
         JSON.stringify(r.envelope, null, 2),
       );
+    }
   await writeFile(join(out, 'summary.md'), summary);
   if (process.env.GITHUB_STEP_SUMMARY)
     await appendFile(process.env.GITHUB_STEP_SUMMARY, summary + '\n');
   process.stdout.write(summary + '\n');
+  // The portal contract: required on GitHub Actions, where the identity comes from.
+  if (process.env.GITHUB_ACTIONS === 'true') {
+    try {
+      const manifest = buildManifest(process.env, {
+        commitSha,
+        codeQualityRef: option(args, 'code-quality-ref') ?? '',
+        results,
+        envelopeFiles,
+      });
+      await writeFile(
+        join(out, 'manifest.json'),
+        JSON.stringify(manifest, null, 2),
+      );
+    } catch (error) {
+      if (!(error instanceof ManifestError)) throw error;
+      process.stderr.write(`manifest invalid: ${error.message}\n`);
+      return 2;
+    }
+  }
   return decision.exitCode;
 }
 

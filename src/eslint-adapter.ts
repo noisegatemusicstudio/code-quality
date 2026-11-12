@@ -59,15 +59,16 @@ export interface EslintScanResult {
 
 function readVersions(): EslintVersions {
   const require = createRequire(import.meta.url);
-  const v = (name: string): string =>
-    (require(`${name}/package.json`) as { version: string }).version;
+  // Literal specifiers only: no module path is ever computed.
+  const v = (manifest: unknown): string =>
+    (manifest as { version: string }).version;
   return {
-    eslint: v('eslint'),
-    typescriptEslint: v('typescript-eslint'),
-    parser: v('@typescript-eslint/parser'),
-    plugin: v('@typescript-eslint/eslint-plugin'),
-    eslintJs: v('@eslint/js'),
-    espree: v('espree'),
+    eslint: v(require('eslint/package.json')),
+    typescriptEslint: v(require('typescript-eslint/package.json')),
+    parser: v(require('@typescript-eslint/parser/package.json')),
+    plugin: v(require('@typescript-eslint/eslint-plugin/package.json')),
+    eslintJs: v(require('@eslint/js/package.json')),
+    espree: v(require('espree/package.json')),
   };
 }
 

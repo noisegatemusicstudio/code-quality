@@ -8,6 +8,7 @@ import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { access } from 'node:fs/promises';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -167,14 +168,9 @@ const report = (root: string) =>
   JSON.stringify({
     statistics: {
       formats: {
-        typescript: {
-          sources: {
-            [`${root}a.ts`]: { lines: 30 },
-            [`${root}b.ts`]: { lines: 30 },
-          },
-        },
+        typescript: { lines: 60, sources: 2, clones: 1 },
       },
-      total: { lines: 60, clones: 1 },
+      total: { lines: 60, sources: 2, clones: 1 },
     },
     duplicates: [
       {
@@ -194,6 +190,8 @@ const report = (root: string) =>
       },
     ],
   });
+// The report carries no per-file lines; the snapshot files supply them.
+const thirty = 'x\n'.repeat(30);
 // Fake jscpd: prints the pinned version, writes the report FILE into --output
 // (relative to its cwd, as the real reporter does) and nothing on stdout.
 const jscpdFake = (write: string) =>
@@ -215,7 +213,7 @@ await test(
     );
     const envelope = await runAdapter(jscpdAdapter(exe.path, exe.sha256), {
       scope,
-      files: { 'a.ts': 'x', 'b.ts': 'y' },
+      files: { 'a.ts': thirty, 'b.ts': thirty },
     });
     assert.equal(envelope.status, 'completed');
     assert.equal(envelope.findings.length, 2);
@@ -280,7 +278,11 @@ await test('customer-scan parsers reuse the adapter parsers and relativize paths
   assert.equal(g?.findings[0]?.path, 'a/b.ts');
   // Entries the shared parser would skip make the whole count report invalid.
   assert.equal(parseExternalReport('gitleaks', gl, '/other'), null);
-  const j = parseExternalReport('jscpd', Buffer.from(report(`${root}/`)), root);
+  const snap = mkdtempSync(join(tmpdir(), 'jscpd-pins-'));
+  writeFileSync(join(snap, 'a.ts'), thirty);
+  writeFileSync(join(snap, 'b.ts'), thirty);
+  const j = parseExternalReport('jscpd', Buffer.from(report('')), snap);
+  rmSync(snap, { recursive: true, force: true });
   assert.equal(j?.findingCount, 1);
   assert.equal(j?.coveredFileCount, 2);
   assert.equal(j?.findings[0]?.path, 'a.ts');

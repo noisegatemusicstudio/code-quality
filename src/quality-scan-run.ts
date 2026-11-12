@@ -466,6 +466,99 @@ export function parseExceptions(text: string): GitleaksException[] {
   return list as GitleaksException[];
 }
 
+export interface ExceptionLoad {
+  /** Exceptions that may suppress findings in this run. */
+  exceptions: GitleaksException[];
+  /** Where they came from; pull requests never use their own file. */
+  source: 'base-commit' | 'scanned-commit';
+  baseSha?: string;
+  /** Added or changed by the scanned commit but not yet in force (PR only). */
+  pending: GitleaksException[];
+  /** Set when the PR's own exceptions file could not be read for the pending list. */
+  pendingError?: string;
+}
+export class ExceptionSourceError extends Error {}
+
+const sorted = (value: unknown): unknown =>
+  Array.isArray(value)
+    ? value.map(sorted)
+    : value && typeof value === 'object'
+      ? Object.fromEntries(
+          Object.entries(value as Record<string, unknown>)
+            .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
+            .map(([k, v]) => [k, sorted(v)]),
+        )
+      : value;
+const canonical = (e: GitleaksException): string => JSON.stringify(sorted(e));
+
+/**
+ * Choose and read the reviewed exceptions. A `quality-exceptions.json` read
+ * from the scanned commit would let a pull request exempt its own findings, so
+ * for pull_request events only the BASE commit counts: a new exception takes
+ * effect after it is merged. Entries the PR adds or changes are returned as
+ * `pending`. Any other event reads the scanned (pushed) commit. A pull request
+ * whose base commit cannot be determined or read fails closed (throws).
+ * `readHead` reads the scanned commit's file; `readBase(sha)` reads the file at
+ * a commit. Both return `undefined` when the file does not exist.
+ */
+export async function loadExceptions(input: {
+  environment: Readonly<Record<string, string | undefined>>;
+  readHead: () => Promise<string | undefined>;
+  readBase: (baseSha: string) => Promise<string | undefined>;
+  readEvent: (path: string) => Promise<string>;
+}): Promise<ExceptionLoad> {
+  const { environment: env } = input;
+  const parse = (text: string | undefined) =>
+    text === undefined ? [] : parseExceptions(text);
+  const eventName = env.GITHUB_EVENT_NAME ?? '';
+  if (eventName !== 'pull_request' && eventName !== 'pull_request_target')
+    return {
+      exceptions: parse(await input.readHead()),
+      source: 'scanned-commit',
+      pending: [],
+    };
+  let baseSha: unknown;
+  try {
+    const event: unknown = JSON.parse(
+      await input.readEvent(env.GITHUB_EVENT_PATH ?? ''),
+    );
+    const pr = (event as { pull_request?: { base?: { sha?: unknown } } })
+      .pull_request;
+    baseSha = pr?.base?.sha;
+  } catch {
+    baseSha = undefined;
+  }
+  if (typeof baseSha !== 'string' || !/^[0-9a-f]{40}$/.test(baseSha))
+    throw new ExceptionSourceError(
+      'pull request base commit could not be determined',
+    );
+  let exceptions: GitleaksException[];
+  try {
+    exceptions = parse(await input.readBase(baseSha));
+  } catch {
+    throw new ExceptionSourceError(
+      'exceptions file at the pull request base commit could not be read',
+    );
+  }
+  const inForce = new Set(exceptions.map(canonical));
+  let pending: GitleaksException[] = [];
+  let pendingError: string | undefined;
+  try {
+    pending = parse(await input.readHead()).filter(
+      (e) => !inForce.has(canonical(e)),
+    );
+  } catch {
+    pendingError = 'exceptions file in this pull request is malformed';
+  }
+  return {
+    exceptions,
+    source: 'base-commit',
+    baseSha,
+    pending,
+    ...(pendingError ? { pendingError } : {}),
+  };
+}
+
 /** Run every selected engine against the checked-out commit. Never throws. */
 export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
   const paths = await trackedPaths(options.repo);

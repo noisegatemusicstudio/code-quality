@@ -8,8 +8,10 @@ import {
   severityLevels,
   type Baseline,
   type Decision,
+  type EngineId,
   type EngineResult,
   type Severity,
+  engineIds,
 } from './quality-scan.js';
 
 /** Missing measures never pass silently: `fail` blocks, `report` is shown but does not block. */
@@ -22,6 +24,13 @@ export interface QualityGate {
   newIssues: { failOnSeverity: Severity };
   secrets: { maxFindings: number };
   requiredEnginesMustComplete: boolean;
+  /**
+   * Engines that are reported but not required: when one fails or is
+   * incomplete it is listed, and `requiredEnginesMustComplete` ignores it.
+   * Their findings still count at their normalised severity. Optional in a
+   * gate file; absent means every engine is required.
+   */
+  advisoryEngines?: readonly EngineId[];
   newCodeCoverage: { minPercent: number; onUnknown: OnUnknown };
   newCodeDuplication: { maxPercent: number; onUnknown: OnUnknown };
 }
@@ -69,6 +78,20 @@ const text = (value: unknown, name: string): string =>
     ? value
     : fail(`${name} must be a non-empty string`);
 
+const advisoryList = (value: unknown): EngineId[] => {
+  if (value === undefined) return [];
+  if (!Array.isArray(value)) return fail('advisoryEngines must be an array');
+  const out: EngineId[] = [];
+  for (const item of value as unknown[]) {
+    const id = engineIds.find((e) => e === item);
+    if (id === undefined)
+      return fail(`advisoryEngines has an unknown engine: ${String(item)}`);
+    if (out.includes(id)) return fail(`advisoryEngines repeats ${id}`);
+    out.push(id);
+  }
+  return out;
+};
+
 /** Strict parser: unknown or missing keys and out-of-range values are rejected, never defaulted. */
 export function parseGate(source: string): QualityGate {
   let raw: unknown;
@@ -78,8 +101,10 @@ export function parseGate(source: string): QualityGate {
     return fail('not valid JSON');
   }
   const top = record(raw, 'gate');
+  // `advisoryEngines` is the one optional key; every other key is mandatory.
+  const { advisoryEngines: advisoryRaw, ...required } = top;
   exactKeys(
-    top,
+    required,
     [
       'schemaVersion',
       'name',
@@ -108,6 +133,7 @@ export function parseGate(source: string): QualityGate {
     (secrets.maxFindings as number) < 0
   )
     fail('secrets.maxFindings must be a non-negative integer');
+  const advisoryEngines = advisoryList(advisoryRaw);
   if (typeof top.requiredEnginesMustComplete !== 'boolean')
     fail('requiredEnginesMustComplete must be a boolean');
   const coverage = record(top.newCodeCoverage, 'newCodeCoverage');
@@ -122,6 +148,7 @@ export function parseGate(source: string): QualityGate {
     newIssues: { failOnSeverity: severity as Severity },
     secrets: { maxFindings: secrets.maxFindings as number },
     requiredEnginesMustComplete: top.requiredEnginesMustComplete as boolean,
+    ...(advisoryEngines.length > 0 ? { advisoryEngines } : {}),
     newCodeCoverage: {
       minPercent: percent(coverage.minPercent, 'newCodeCoverage.minPercent'),
       onUnknown: onUnknown(coverage.onUnknown, 'newCodeCoverage.onUnknown'),
@@ -178,8 +205,10 @@ export function decideWithGate(
   const broken = results
     .filter((r) => r.status === 'failed' || r.status === 'incomplete')
     .map((r) => r.engine);
-  if (gate.requiredEnginesMustComplete && broken.length)
-    reasons.push(`failed or incomplete: ${broken.join(', ')}`);
+  const advisory = gate.advisoryEngines ?? [];
+  const requiredBroken = broken.filter((id) => !advisory.includes(id));
+  if (gate.requiredEnginesMustComplete && requiredBroken.length)
+    reasons.push(`failed or incomplete: ${requiredBroken.join(', ')}`);
   let blocking = 0;
   let secrets = 0;
   for (const result of results) {

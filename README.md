@@ -470,7 +470,7 @@ Licence, redistribution and hosted-use review of candidate scanners (RRDSCRUM-61
 package's scanners on a pull request: ESLint (bundled rules), Gitleaks, Trivy
 (filesystem IaC checks), Semgrep (ReleaseReady rules in `rules/semgrep` only, no
 registry rules), jscpd and OSV, plus ShellCheck and shfmt (`-d`, never rewrites)
-for shell scripts, actionlint and zizmor (`--offline`) for workflows, hadolint
+for shell scripts, Prettier (`--check` semantics, see below), actionlint and zizmor (`--offline`) for workflows, hadolint
 (Dockerfiles), tflint (Terraform, bundled ruleset only, no plugin downloads),
 yamllint and markdownlint-cli2, Ruff (Python) and detekt plus ktlint (Kotlin),
 all with bundled default configs (project
@@ -487,6 +487,21 @@ are reported `skipped: needs a Java runtime`, never clean, and they only run
 when the repository has tracked `.kt` or `.kts` files. They read no project
 configuration (`detekt.yml`, `.editorconfig`), apply no plugins and never format.
 The job needs `contents: read` and no secrets.
+
+**Prettier** (only when the repository tracks TS/JS, JSON, YAML, Markdown or CSS
+files) reports one `prettier/format` finding per tracked file that Prettier
+would rewrite, and never rewrites anything. It runs the Prettier this package
+depends on (`3.9.10`) from the tool checkout: the scanned repository's
+`node_modules`, plugins and code are never used. A JSON or YAML Prettier config
+(`.prettierrc`, `.prettierrc.json`, `.prettierrc.yaml`/`.yml`, or an object in
+`package.json`) is honoured and the root `.prettierignore` applies. A JS or TS
+config (`prettier.config.*`, `.prettierrc.js` and similar) is never loaded:
+Prettier defaults are used and the engine is reported `incomplete` with reason
+`customer-config-rejected`. A file that fails to parse makes it `incomplete`
+with reason `parse-failure`, never a pass. Findings are `info` and the engine is
+listed under `advisoryEngines` in `gates/default.json`, so formatting is
+reported and does not fail the gate, even when the run is incomplete
+(rationale: `docs/language-profiles.md` section 3).
 
 **Java** (only when the repository has `.java` files; otherwise the engines are
 skipped as not applicable): PMD 7 with its bundled `quickstart` ruleset and

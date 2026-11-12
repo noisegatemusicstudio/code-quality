@@ -202,3 +202,8 @@ unmodified binary; nothing is bundled or redistributed.
 - Runtime: the workflow's JDK (`JAVA_HOME/bin/java` or `--java`, the same step as the Java engines). The Java runtime is not pinned or hashed; the jars' bytes are. With no runtime both engines are reported `skipped: needs a Java runtime`, never clean.
 - Configuration: detekt runs its default ruleset with no `detekt.yml`, baseline or plugins and no type resolution; ktlint runs the standard ruleset in the official code style with no `.editorconfig`. The adapter copies only `.kt` and `.kts` files into its workspace, so no project configuration is read. Neither engine formats or fixes source.
 - Severity: detekt SARIF `error`, `warning`, `note` map to high, medium, low; ktlint has no severity, so each violation is `style` and maps to low. Unknown labels map to high.
+
+### Prettier (follow-up slice 11)
+
+- Prettier 3.9.10: MIT. It is already a direct dependency of this package (exact version in `package.json` and `package-lock.json`), so no new artefact is downloaded or pinned. The adapter refuses to run if the installed version differs from the approved one.
+- Run from this package's own `node_modules` with `process.execPath`; nothing is redistributed and nothing is installed at scan time. The scanned repository's Prettier, plugins and config code are never loaded (see `docs/language-profiles.md`, slice 11).

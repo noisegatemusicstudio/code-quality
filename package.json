@@ -37,6 +37,7 @@
     "./coverage-detail": "./dist/src/coverage-detail.js",
     "./duplication": "./dist/src/duplication.js",
     "./eslint-adapter": "./dist/src/eslint-adapter.js",
+    "./prettier-adapter": "./dist/src/prettier-adapter.js",
     "./finding-compare": "./dist/src/finding-compare.js",
     "./quality-gate": "./dist/src/quality-gate.js",
     "./language-detection": "./dist/src/language-detection.js"

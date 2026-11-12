@@ -6,11 +6,13 @@ import {
   isYamlFile,
 } from './lint-adapters.js';
 import { isJavaFile } from './java-adapters.js';
+import { isPrettierFile } from './prettier-adapter.js';
 import { renderLanguages, type LanguageReport } from './language-detection.js';
 
 /** Engines the reusable `quality-scan` workflow can run, in report order. */
 export const engineIds = [
   'eslint',
+  'prettier',
   'gitleaks',
   'osv',
   'trivy',
@@ -140,6 +142,9 @@ export function detectApplicability(
     eslint: some((p) => eslintExtension.test(p))
       ? yes
       : no('no JavaScript or TypeScript files'),
+    prettier: some(isPrettierFile)
+      ? yes
+      : no('no JS, TS, JSON, YAML, Markdown or CSS files'),
     gitleaks: yes,
     jscpd: yes,
     osv: some((p) => supportedLockfiles.includes(baseName(p)))
@@ -197,7 +202,8 @@ export function normaliseSeverity(
           : label === 'style'
             ? 'info'
             : 'high';
-  if (engine === 'shfmt') return 'info';
+  // Formatters only report layout, so their findings never rank above info.
+  if (engine === 'shfmt' || engine === 'prettier') return 'info';
   if (engine === 'actionlint') return 'medium';
   if (engine === 'eslint')
     return label === 'error' ? 'medium' : label === 'warn' ? 'low' : 'high';

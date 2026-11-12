@@ -117,13 +117,32 @@ Corrections to the expected candidates:
 invalid or unreadable gate exits 2). It is modelled on the industry-standard
 "Sonar way" new-code gate:
 
-| Condition            | Default                      | Behaviour                                                                            |
-| -------------------- | ---------------------------- | ------------------------------------------------------------------------------------ |
-| New issues           | none at `high` or `critical` | With a baseline only findings absent from it count; without one every finding counts |
-| Secrets              | 0 findings                   | Any gitleaks finding fails, whatever the severity threshold                          |
-| Required engines     | all must complete            | A failed or incomplete engine fails; a skipped engine is reported, never clean       |
-| New-code coverage    | at least 80% (lines)         | Measured from a caller-supplied report; `onUnknown: "report"` today                  |
-| New-code duplication | at most 3%                   | Measured from jscpd over the changed lines; `onUnknown: "report"` today              |
+| Condition            | Default                      | Behaviour                                                                                                                                                         |
+| -------------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| New issues           | none at `high` or `critical` | With a baseline only findings absent from it count; without one every finding counts                                                                              |
+| Secrets              | 0 findings                   | Any gitleaks finding fails, whatever the severity threshold                                                                                                       |
+| Required engines     | all must complete            | A failed or incomplete engine fails; a skipped engine is reported, never clean. Engines in `advisoryEngines` (Prettier) are excluded: they are listed, not gating |
+| New-code coverage    | at least 80% (lines)         | Measured from a caller-supplied report; `onUnknown: "report"` today                                                                                               |
+| New-code duplication | at most 3%                   | Measured from jscpd over the changed lines; `onUnknown: "report"` today                                                                                           |
+
+### Prettier is advisory in the default gate (slice 11)
+
+Prettier is **not required** in `gates/default.json` (`"advisoryEngines":
+["prettier"]`). Formatting is a layout preference, not a defect, so it follows
+Sonar's treatment of code smells: reported, never gating. Two things make that
+true:
+
+- Findings (`prettier/format`, native label `format`) normalise to `info`, below
+  the gate's `high` threshold.
+- A Prettier run that is `incomplete` or `failed` is still shown with its
+  reason, but `requiredEnginesMustComplete` ignores it. Without this a common
+  case (a repository with `prettier.config.js`, which we refuse to execute)
+  would block every pull request on a style tool.
+
+`advisoryEngines` is an optional gate key (absent means every engine is
+required, the behaviour before this slice). Names must be known engines. A gate
+that wants formatting to gate can drop the entry and lower
+`newIssues.failOnSeverity` to `info`.
 
 ### New-code measures (slice 12)
 
@@ -162,9 +181,9 @@ threshold; the workflow default `high` equals the gate's.
 Every run lists the languages found with file counts. A language without a
 language-aware engine is reported as `skipped: no engine yet`, in both
 `summary.md` and `report.json` (`languages`). Today only TypeScript and
-JavaScript (ESLint, Semgrep), Python (Ruff), Java (PMD, Checkstyle), Kotlin (detekt, ktlint), Shell (ShellCheck, shfmt), GitHub Actions
+JavaScript (ESLint, Semgrep), Python (Ruff), Java (PMD, Checkstyle), Kotlin (detekt, ktlint), JSON and CSS (Prettier), Shell (ShellCheck, shfmt), GitHub Actions
 workflows (actionlint, zizmor), Dockerfile (Trivy, hadolint), Terraform (Trivy,
-tflint), YAML (yamllint) and Markdown (markdownlint) count as covered; gitleaks, OSV and jscpd are language-agnostic and not counted.
+tflint), YAML (yamllint, Prettier) and Markdown (markdownlint, Prettier) count as covered (Prettier is also listed for TypeScript and JavaScript); gitleaks, OSV and jscpd are language-agnostic and not counted.
 
 ## 5. Jira mapping
 
@@ -196,7 +215,28 @@ tflint), YAML (yamllint) and Markdown (markdownlint) count as covered; gitleaks,
    (FindSecBugs comes with it).
 9. Swift: SwiftLint (needs a Swift runner).
 10. YAML and Markdown: yamllint and markdownlint. **Done.**
-11. Prettier check as an engine for TS/JS and the formats above.
+11. Prettier check as an engine for TS/JS, JSON, YAML, Markdown and CSS.
+    **Done:** the Prettier this package depends on runs from the tool
+    checkout (never the scanned repo's copy or plugins); advisory in the
+    default gate (see section 3). Behaviour:
+    - One `prettier/format` finding per unformatted tracked file (`info`),
+      never `--write`. Untracked files are not read.
+    - Config: `.prettierrc` (JSON or YAML), `.prettierrc.json`,
+      `.prettierrc.yaml`/`.yml` and an object under `package.json` `prettier`
+      are honoured, nearest file wins. `.editorconfig` is not read.
+    - JS/TS config (`prettier.config.*`, `.prettierrc.js`/`.cjs`/`.mjs`/`.ts`),
+      `.prettierrc.json5`/`.toml` and a `package.json` `prettier` that names a
+      module are **not loaded**. Prettier defaults apply to the whole run and
+      the engine is `incomplete` with reason `customer-config-rejected`
+      (the summary names the files). A `plugins` or non-built-in `parser`
+      option in a JSON/YAML config is dropped the same way.
+    - The root `.prettierignore` is honoured (nested ignore files are not).
+      Lockfiles, `node_modules`, `dist`, `build`, `coverage`, `vendor` and
+      `*.min.*` are never checked.
+    - A file Prettier cannot parse makes the run `incomplete` with reason
+      `parse-failure` and is listed; healthy files still report. Files over
+      the adapter input limits make it `incomplete` too. A run is never
+      reported clean when files were not checked.
 12. New-code coverage and duplication measures wired into the gate. **Done**
     (`onUnknown` stays `report`; flipping it to `fail` is a separate decision).
 13. Type-aware ESLint for customers: opt-in input that supplies a reviewed

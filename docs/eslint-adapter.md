@@ -18,7 +18,10 @@ runs.
 Everything else (`.jsx`, `.tsx`, other languages, JSON) is listed under
 `unsupportedFiles`, never silently dropped. `node_modules`, `dist`, `build`,
 `coverage`, `vendor` and `*.min.js` are excluded and listed. No TypeScript project
-or transpilation is needed, so type-aware rules are not run. No browser or Node
+or transpilation is needed, so type-aware rules are not run unless the caller
+opts in with a reviewed tsconfig (`runEslintScan(request, { tsconfig, files })`,
+`docs/language-profiles.md` slice 13; unresolved imports make the run
+`incomplete`/`type-info-partial`). No browser or Node
 globals are configured and `no-undef` is off. Inline `eslint-*` comments are
 ignored (`noInlineConfig`), so customer code cannot disable rules.
 

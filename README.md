@@ -560,7 +560,8 @@ jobs:
   from an earlier run, enabling the new-vs-baseline column), `osv-mode` (see
   below), `base-ref` (push baseline for new-code measures) and `coverage-report`
   (repo-relative Istanbul `coverage-final.json`; see
-  `docs/language-profiles.md` section 3).
+  `docs/language-profiles.md` section 3) and `eslint-tsconfig` (optional
+  opt-in for type-aware ESLint; see below).
 - Output: a Markdown job summary (counts per engine; skipped, failed and
   incomplete engines are listed and never shown as clean) and a
   `code-quality-results` artifact, described below.
@@ -636,6 +637,25 @@ Known limits: Gitleaks and jscpd use the
 committed-snapshot API, so they need a full-history checkout, Git 2.47 or newer,
 and stay within its size bounds (otherwise they report `failed`). A project's own
 ESLint config is ignored; the bundled rules run instead.
+
+### Type-aware ESLint (opt-in)
+
+By default the scan's ESLint is syntax-only (`strict` and `stylistic`). Set
+`eslint-tsconfig: path/to/tsconfig.json` (CLI: `--eslint-tsconfig`) to run
+`strict-type-checked` and `stylistic-type-checked` instead, which adds rules such
+as `no-floating-promises`. The path must be a tracked `.json` file in the
+repository, without `..`, and any `extends` must point at other tracked
+repository files; a package or `node_modules` target is refused, and a refused
+tsconfig makes ESLint `failed` (`tsconfig-rejected`) rather than quietly running
+without types. The scanned repository's `node_modules`, plugins and ESLint
+config are never used, and nothing is built or installed.
+
+Because dependencies are not installed, imports that do not resolve (including
+Node built-ins when `@types/node` is absent) make ESLint `incomplete` with reason
+`type-info-partial`; the summary lists up to 10 of those modules and findings
+from resolvable code still report. Treat that as "typed results may be missing",
+not as clean. The run is bounded by the adapter timeout and a heap limit. Details:
+`docs/language-profiles.md` follow-up slice 13.
 
 ## Running outside GitHub Actions
 

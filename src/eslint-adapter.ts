@@ -8,11 +8,13 @@ import {
   redactMessage,
 } from './adapter-envelope.js';
 import { parseEslintJson } from './eslint-import.js';
+import { unresolvedModuleRuleId } from './eslint-unresolved-module.js';
 import { normalisedSnippet, stableFingerprint } from './finding-compare.js';
 import {
   type AdapterRequest,
   type ParsedOutput,
   type ScannerAdapter,
+  adapterLimits,
   runAdapter,
 } from './scanner-adapter.js';
 
@@ -22,6 +24,11 @@ export const approvedVersions = Object.freeze({
   typescriptEslint: '8.72.1',
 });
 export const eslintConfigVersion = 'bundled-1';
+/** Distinct from the default so typed and untyped runs never compare as one. */
+export const eslintTypedConfigVersion = 'bundled-typed-1';
+/** Heap ceiling for the type-aware ESLint process; exceeding it fails closed. */
+const typedHeapMb = 2048;
+const unresolvedSampleLimit = 20;
 export const supportedExtensions = [
   '.js',
   '.mjs',
@@ -60,6 +67,19 @@ export interface EslintScanReport {
   parseFailures: string[];
   /** Counts beyond the listed names, when a list was truncated. */
   truncated: boolean;
+  /** Present only for the type-aware opt-in. */
+  typeAware?: {
+    tsconfig: string;
+    /** Distinct module specifiers TypeScript could not resolve. */
+    unresolvedModuleCount: number;
+    /** Bounded, sorted sample of those specifiers. */
+    unresolvedModules: string[];
+  };
+}
+/** The validated opt-in: the tsconfig and every file it extends (see eslint-tsconfig.ts). */
+export interface TypedEslintInput {
+  tsconfig: string;
+  files: Readonly<Record<string, string>>;
 }
 export interface EslintScanResult {
   envelope: AdapterEnvelope;
@@ -106,12 +126,14 @@ export function classifyFiles(paths: readonly string[]): {
 interface Collected {
   parseFailures: string[];
   lintedFiles: number;
+  unresolvedModules: Set<string>;
 }
 
 /** Throws if the installed engine or rules differ from the approved pins. */
 export function createEslintAdapter(
   files: Readonly<Record<string, string>>,
   collected: Collected,
+  typed?: TypedEslintInput,
 ): { adapter: ScannerAdapter; versions: EslintVersions } {
   const versions = readVersions();
   if (
@@ -129,7 +151,7 @@ export function createEslintAdapter(
   );
   const config = join(
     dirname(fileURLToPath(import.meta.url)),
-    'eslint-scan-config.js',
+    typed ? 'eslint-scan-config-typed.js' : 'eslint-scan-config.js',
   );
   const parse = (
     stdout: string,
@@ -153,6 +175,12 @@ export function createEslintAdapter(
         continue;
       }
       for (const m of entry.messages as Record<string, unknown>[]) {
+        if (m.ruleId === unresolvedModuleRuleId) {
+          // Probe, not a finding: it only says type information is partial.
+          if (typeof m.message === 'string')
+            collected.unresolvedModules.add(m.message);
+          continue;
+        }
         if (m.fatal === true) {
           collected.parseFailures.push(rel);
           partial = 'parse-failure';
@@ -200,6 +228,7 @@ export function createEslintAdapter(
         });
       }
     }
+    if (collected.unresolvedModules.size > 0) partial ??= 'type-info-partial';
     candidates.sort(
       (a, b) =>
         a.finding.path.localeCompare(b.finding.path, 'en') ||
@@ -230,16 +259,19 @@ export function createEslintAdapter(
     adapter: {
       engine: { id: 'eslint', version: versions.eslint },
       rulesetVersion: `typescript-eslint-${versions.typescriptEslint}`,
-      configVersion: eslintConfigVersion,
+      configVersion: typed ? eslintTypedConfigVersion : eslintConfigVersion,
       executable: process.execPath,
       versionArgs: [bin, '--version'],
       versionOutput: `v${versions.eslint}`,
       // Never --fix: results are advice only. Customer config is not looked up.
       fixedArgs: [
+        ...(typed ? [`--max-old-space-size=${String(typedHeapMb)}`] : []),
         bin,
         '--no-config-lookup',
         '--config',
         config,
+        // Type information comes from this one reviewed tsconfig only.
+        ...(typed ? ['--parser-options', `project:./${typed.tsconfig}`] : []),
         '--format',
         'json',
         '--no-warn-ignored',
@@ -263,9 +295,14 @@ const limit = (names: string[]): string[] => names.slice(0, listLimit);
  */
 export async function runEslintScan(
   request: AdapterRequest,
+  typed?: TypedEslintInput,
 ): Promise<EslintScanResult> {
   const classes = classifyFiles(Object.keys(request.files));
-  const collected: Collected = { parseFailures: [], lintedFiles: 0 };
+  const collected: Collected = {
+    parseFailures: [],
+    lintedFiles: 0,
+    unresolvedModules: new Set(),
+  };
   const report = (versions?: EslintVersions): EslintScanReport => ({
     analysis: 'lint',
     notAnalysed: ['sast', 'dependencies', 'coverage', 'duplication'],
@@ -280,12 +317,23 @@ export async function runEslintScan(
       classes.unsupported.length > listLimit ||
       classes.excluded.length > listLimit ||
       collected.parseFailures.length > listLimit,
+    ...(typed
+      ? {
+          typeAware: {
+            tsconfig: typed.tsconfig,
+            unresolvedModuleCount: collected.unresolvedModules.size,
+            unresolvedModules: [...collected.unresolvedModules]
+              .sort((a, b) => a.localeCompare(b, 'en'))
+              .slice(0, unresolvedSampleLimit),
+          },
+        }
+      : {}),
   });
   const supported: Record<string, string> = {};
   for (const p of classes.supported) supported[p] = request.files[p];
   let built: ReturnType<typeof createEslintAdapter>;
   try {
-    built = createEslintAdapter(supported, collected);
+    built = createEslintAdapter(supported, collected, typed);
   } catch {
     // Without a trusted pinned engine nothing runs; borrow a placeholder pin.
     const envelope = await runAdapter(
@@ -323,9 +371,18 @@ export async function runEslintScan(
   if (classes.customerConfig.length > 0)
     return skip('customer-config-rejected');
   if (classes.supported.length === 0) return skip('no-supported-files');
-  const envelope = await runAdapter(built.adapter, {
-    ...request,
-    files: supported,
-  });
+  // The type-aware run reads the tsconfig chain from the workspace and gets the
+  // adapter ceiling, since building a program is slower than parsing. It stays
+  // bounded by that ceiling and the heap limit; either ends the run closed.
+  const envelope = await runAdapter(
+    built.adapter,
+    typed
+      ? {
+          ...request,
+          files: { ...typed.files, ...supported },
+          timeoutMs: adapterLimits.timeoutMs,
+        }
+      : { ...request, files: supported },
+  );
   return { envelope, report: report(built.versions) };
 }

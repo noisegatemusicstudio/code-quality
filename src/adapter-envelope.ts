@@ -38,6 +38,8 @@ export const envelopeReasons = [
   'customer-config-rejected',
   'no-supported-files',
   'parse-failure',
+  'type-info-partial',
+  'tsconfig-rejected',
 ] as const;
 export type EnvelopeReason = (typeof envelopeReasons)[number];
 export type EnvelopeProvenance = 'imported-unverified' | 'adapter-executed';

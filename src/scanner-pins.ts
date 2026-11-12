@@ -89,6 +89,21 @@ export const semgrepPin = immutableMetadata({
   wheelSha256:
     '0eb6aaadad5b957af96d1300487e10af1dc8016e8ef53072effb48cd4906c02b',
 });
+export const ruffPin = immutableMetadata({
+  version: '0.17.4',
+  license: 'MIT',
+  /** sha256 of the extracted `ruff` executable (upstream release tarball). */
+  sha256: '4ef33997b4bb7c5f141527e90b2da0abe918108362ca1b9825c4d13adce0e347',
+  coverage:
+    'Ruff E, F, W, I, B, UP, S, C4, SIM, PL from the bundled config only; project pyproject.toml/ruff.toml are never read; no type checking',
+});
+/** mypy is not run: it needs the project's dependencies installed (see docs/language-profiles.md). */
+export const mypyPin = immutableMetadata({
+  version: '2.4.1',
+  license: 'MIT',
+  skipReason:
+    'needs dependency environment: mypy --strict needs the project dependencies installed, and a scan never installs project dependencies or runs project code, so it cannot give a trustworthy result',
+});
 
 /** Lint engines added after the first set; all run with bundled defaults only. */
 export const hadolintPin = immutableMetadata({
@@ -170,6 +185,15 @@ export const releaseAssets = immutableMetadata({
     binarySha256: externalPins.jscpd.sha256,
     source:
       'npm registry dist.integrity sha512-BbL0HypadbjpxNfK/KY4CfpD4sCd2zf9HpFnGwwOjdryjdTG098isft/95BiS/XvZjVT3p6lwLf5ToI97OoqCg== for jscpd-linux-x64-gnu@5.4.3 (no upstream sha256 file is published; sha256 computed from that verified tarball)',
+  },
+  ruff: {
+    url: 'https://github.com/astral-sh/ruff/releases/download/0.17.4/ruff-x86_64-unknown-linux-gnu.tar.gz',
+    assetSha256:
+      '3ab2b34aeacdbc1ea5c529cdbda3e05792633d587228123fd09f3b5a0facb27a',
+    member: 'ruff-x86_64-unknown-linux-gnu/ruff',
+    binarySha256: ruffPin.sha256,
+    source:
+      'https://github.com/astral-sh/ruff/releases/download/0.17.4/ruff-x86_64-unknown-linux-gnu.tar.gz.sha256',
   },
   shellcheck: {
     url: 'https://github.com/koalaman/shellcheck/releases/download/v0.11.0/shellcheck-v0.11.0.linux.x86_64.tar.xz',

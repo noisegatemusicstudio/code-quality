@@ -15,6 +15,8 @@ export const engineIds = [
   'trivy',
   'semgrep',
   'jscpd',
+  'ruff',
+  'mypy',
   'shellcheck',
   'shfmt',
   'actionlint',
@@ -90,6 +92,7 @@ const isEngine = (value: string): value is EngineId =>
 
 const eslintExtension = /\.(?:[cm]?[jt]s)$/;
 const semgrepExtension = /\.(?:[cm]?[jt]s|[jt]sx)$/;
+const pythonExtension = /\.pyi?$/;
 const shellFile = /\.(?:sh|bash|ksh)$/;
 const workflowFile = /(?:^|\/)\.github\/workflows\/[^/]+\.ya?ml$/;
 const iacFile =
@@ -141,6 +144,8 @@ export function detectApplicability(
     semgrep: some((p) => semgrepExtension.test(p))
       ? yes
       : no('no JavaScript or TypeScript files'),
+    ruff: some((p) => pythonExtension.test(p)) ? yes : no('no Python files'),
+    mypy: some((p) => pythonExtension.test(p)) ? yes : no('no Python files'),
     shellcheck: some((p) => shellFile.test(p)) ? yes : no('no shell scripts'),
     shfmt: some((p) => shellFile.test(p)) ? yes : no('no shell scripts'),
     actionlint: some((p) => workflowFile.test(p))
@@ -192,6 +197,16 @@ export function normaliseSeverity(
         : label === 'info'
           ? 'low'
           : 'high';
+  if (engine === 'ruff') {
+    // Ruff has no severity; the adapter labels each finding by rule family.
+    const ruff: Record<string, Severity> = {
+      error: 'high',
+      security: 'medium',
+      bug: 'medium',
+      convention: 'low',
+    };
+    return ruff[label] ?? 'high';
+  }
   // Lint engines: errors are medium, warnings low, notices and style info.
   // markdownlint has no native levels (recorded as `error`), so it ranks low.
   if (engine === 'markdownlint') return label === 'error' ? 'low' : 'high';

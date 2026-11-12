@@ -5,13 +5,13 @@ import {
   type EnvelopeReason,
   type EnvelopeScope,
   envelopeLimits,
-  findingFingerprint,
   isEnvelopeVersion,
   isSafeRelativePath,
   isValidScope,
   redactMessage,
   validateEnvelope,
 } from './adapter-envelope.js';
+import { assembleFindings } from './finding-assembly.js';
 import {
   type ParsedOutput,
   type ScannerAdapter,
@@ -278,28 +278,17 @@ export function parseSemgrepReport(stdout: string): SemgrepParsedOutput {
       detail,
     });
   }
-  candidates.sort(
-    (a, b) =>
-      a.path.localeCompare(b.path, 'en') ||
-      a.range.startLine - b.range.startLine ||
-      a.range.startColumn - b.range.startColumn ||
-      a.ruleId.localeCompare(b.ruleId, 'en'),
-  );
-  if (candidates.length > envelopeLimits.findings) {
-    candidates.length = envelopeLimits.findings;
-    partial ??= 'finding-limit';
-  }
-  const seen = new Map<string, number>();
+  const assembled = assembleFindings('semgrep', candidates, partial);
   const details: Record<string, SemgrepFindingDetail> = {};
-  const findings = candidates.map(({ detail, ...c }): AdapterFinding => {
-    const key = findingFingerprint('semgrep', c);
-    const n = seen.get(key) ?? 0;
-    seen.set(key, n + 1);
-    const fingerprint = n === 0 ? key : findingFingerprint('semgrep', c, n);
-    details[fingerprint] = detail;
-    return { ...c, fingerprint };
-  });
-  return partial ? { findings, partial, details } : { findings, details };
+  const findings = assembled.findings.map(
+    ({ detail, ...f }): AdapterFinding => {
+      details[f.fingerprint] = detail;
+      return f;
+    },
+  );
+  return assembled.partial
+    ? { findings, partial: assembled.partial, details }
+    : { findings, details };
 }
 
 /** Policy gate evaluated before anything is written or executed. */

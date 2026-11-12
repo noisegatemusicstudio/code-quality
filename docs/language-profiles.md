@@ -127,7 +127,7 @@ default `high` equals the gate's.
 Every run lists the languages found with file counts. A language without a
 language-aware engine is reported as `skipped: no engine yet`, in both
 `summary.md` and `report.json` (`languages`). Today only TypeScript and
-JavaScript (ESLint, Semgrep), Shell (ShellCheck, shfmt), GitHub Actions
+JavaScript (ESLint, Semgrep), Python (Ruff), Shell (ShellCheck, shfmt), GitHub Actions
 workflows (actionlint, zizmor), Dockerfile (Trivy, hadolint), Terraform (Trivy,
 tflint), YAML (yamllint) and Markdown (markdownlint) count as covered; gitleaks, OSV and jscpd are language-agnostic and not counted.
 
@@ -143,7 +143,9 @@ tflint), YAML (yamllint) and Markdown (markdownlint) count as covered; gitleaks,
 ## 6. Follow-up slices (one per engine group, in order)
 
 1. Clean up the five migration-debt rules in this repository and re-enable them.
-2. Python: Ruff and mypy adapters (RRDSCRUM-187).
+2. Python: Ruff and mypy adapters (RRDSCRUM-187). **Done:** Ruff 0.17.4 runs
+   from a bundled isolated config and is sha256-pinned; mypy is reported
+   `skipped: needs dependency environment` (see `docs/scanner-licensing.md`).
 3. Shell: ShellCheck and shfmt (RRDSCRUM-188). **Done**: pinned, severity-mapped.
 4. GitHub Actions: actionlint and zizmor (cheap, MIT, we already ship workflows). **Done**: pinned, zizmor offline.
 5. Dockerfile: hadolint (GPL, internal runs first). **Done.**

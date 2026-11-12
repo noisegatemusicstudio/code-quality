@@ -40,9 +40,15 @@ await test('every language present is listed with its file count', () => {
   assert.equal(byName.has('PNG'), false);
 });
 
+await test('Python is covered by Ruff, not skipped', () => {
+  const python = detectLanguages(paths).find((l) => l.language === 'Python');
+  assert.equal(python?.status, 'covered');
+  assert.deepEqual(python?.engines, ['ruff']);
+});
+
 await test('languages without an engine are skipped, never clean', () => {
   const byName = new Map(detectLanguages(paths).map((l) => [l.language, l]));
-  for (const name of ['Python', 'Kotlin']) {
+  for (const name of ['Kotlin']) {
     assert.equal(byName.get(name)?.status, 'skipped: no engine yet', name);
     assert.deepEqual(byName.get(name)?.engines, []);
   }
@@ -76,7 +82,7 @@ await test('the summary shows unsupported languages explicitly', async () => {
     baseline: null,
     languages,
   });
-  assert.match(summary, /\| Python \| 1 \| skipped: no engine yet \|/);
+  assert.match(summary, /\| Python \| 1 \| analysed by ruff \|/);
   assert.match(summary, /\| TypeScript \| 1 \| analysed by eslint, semgrep \|/);
   assert.match(summary, /not a clean result/);
   assert.deepEqual(renderLanguages([]), []);

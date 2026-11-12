@@ -32,6 +32,7 @@ import {
   type GitleaksException,
   classifyGitleaksEnvelope,
 } from './gitleaks-adapter.js';
+import { ruffVersion, runRuffScan } from './ruff-adapter.js';
 import {
   type LintEngineId,
   lintAdapter,
@@ -58,6 +59,7 @@ import {
   markdownlintPin,
   lintPins,
   osvPin,
+  mypyPin,
   releaseAssets,
   tflintPin,
   trivyPin,
@@ -94,12 +96,20 @@ export const defaultDownloader: Downloader = async (url) => {
 };
 
 export type InstallableEngine =
-  'gitleaks' | 'trivy' | 'osv' | 'jscpd' | 'hadolint' | 'tflint' | LintEngineId;
+  | 'gitleaks'
+  | 'trivy'
+  | 'osv'
+  | 'jscpd'
+  | 'ruff'
+  | 'hadolint'
+  | 'tflint'
+  | LintEngineId;
 export const installableEngines: readonly InstallableEngine[] = [
   'gitleaks',
   'trivy',
   'osv',
   'jscpd',
+  'ruff',
   'shellcheck',
   'shfmt',
   'actionlint',
@@ -738,6 +748,37 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
       causes,
     );
   });
+
+  await guard('ruff', async () => {
+    const executable = options.tools.ruff;
+    if (!executable)
+      return failed(
+        'ruff',
+        options.installErrors.ruff ?? 'ruff is not installed',
+      );
+    const { files, omitted, causes } = await readBoundedFiles(
+      options.repo,
+      paths,
+      (p) => /\.pyi?$/.test(p),
+    );
+    const result = await runRuffScan({
+      executable,
+      scope: options.scope,
+      files,
+    });
+    return applyOmitted(
+      fromEnvelope('ruff', result, ruffVersion),
+      omitted,
+      causes,
+    );
+  });
+
+  await guard('mypy', () =>
+    Promise.resolve({
+      ...skipped('mypy', 'unavailable', mypyPin.skipReason),
+      version: mypyPin.version,
+    }),
+  );
 
   await guard('trivy', async () => {
     const executable = options.tools.trivy;

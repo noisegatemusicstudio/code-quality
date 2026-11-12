@@ -181,7 +181,7 @@ threshold; the workflow default `high` equals the gate's.
 Every run lists the languages found with file counts. A language without a
 language-aware engine is reported as `skipped: no engine yet`, in both
 `summary.md` and `report.json` (`languages`). Today only TypeScript and
-JavaScript (ESLint, Semgrep), Python (Ruff), Java (PMD, Checkstyle), Kotlin (detekt, ktlint), JSON and CSS (Prettier), Shell (ShellCheck, shfmt), GitHub Actions
+JavaScript (ESLint, Semgrep), Python (Ruff), Java (PMD, Checkstyle), Kotlin (detekt, ktlint), Swift (SwiftLint), JSON and CSS (Prettier), Shell (ShellCheck, shfmt), GitHub Actions
 workflows (actionlint, zizmor), Dockerfile (Trivy, hadolint), Terraform (Trivy,
 tflint), YAML (yamllint, Prettier) and Markdown (markdownlint, Prettier) count as covered (Prettier is also listed for TypeScript and JavaScript); gitleaks, OSV and jscpd are language-agnostic and not counted.
 
@@ -213,7 +213,13 @@ tflint), YAML (yamllint, Prettier) and Markdown (markdownlint, Prettier) count a
    (Google checks) run on the workflow's JDK; SpotBugs is reported
    `skipped: requires compiled classes` until a reviewed build input exists
    (FindSecBugs comes with it).
-9. Swift: SwiftLint (needs a Swift runner).
+9. Swift: SwiftLint. **Done:** SwiftLint 0.65.1, the official static Linux
+   binary (`swiftlint-static` from `swiftlint_linux_amd64.zip`), sha256-pinned,
+   so no Swift toolchain or macOS runner is needed. Bundled default rules; the
+   repository `.swiftlint.yml` is honoured only when it is plain YAML data.
+   `swiftlint analyze` is reported `skipped: requires compiled sources`; an
+   unrunnable binary is `failed`, never a pass; no `.swift` files means
+   not applicable and no download (see `docs/scanner-licensing.md`).
 10. YAML and Markdown: yamllint and markdownlint. **Done.**
 11. Prettier check as an engine for TS/JS, JSON, YAML, Markdown and CSS.
     **Done:** the Prettier this package depends on runs from the tool

@@ -277,10 +277,10 @@ await test('mypy is reported skipped with a reason and ruff without an install f
     const byEngine = new Map(results.map((r) => [r.engine, r]));
     const mypy = byEngine.get('mypy');
     assert.equal(mypy?.status, 'skipped');
-    assert.equal(mypy?.skipKind, 'unavailable');
-    assert.match(mypy?.reason ?? '', /^needs dependency environment/);
-    assert.equal(mypy?.reason, mypyPin.skipReason);
-    assert.deepEqual(mypy?.findings, []);
+    assert.equal(mypy.skipKind, 'unavailable');
+    assert.match(mypy.reason ?? '', /^needs dependency environment/);
+    assert.equal(mypy.reason, mypyPin.skipReason);
+    assert.deepEqual(mypy.findings, []);
     assert.equal(byEngine.get('ruff')?.status, 'failed');
   } finally {
     await rm(repo, { recursive: true, force: true });

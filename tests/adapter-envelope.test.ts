@@ -61,7 +61,7 @@ const envelope = (over: Record<string, unknown> = {}): unknown => ({
 await test('valid envelope round-trips and enforces expected scope', () => {
   const ok = validateEnvelope(JSON.stringify(envelope()), scope);
   assert.equal(ok.ok, true);
-  assert.deepEqual(ok.ok && ok.envelope, envelope());
+  assert.deepEqual(ok.envelope, envelope());
 });
 
 await test('cross-scope ids are denied field by field', () => {
@@ -152,7 +152,7 @@ await test('size limits and prototype keys are enforced', () => {
   );
   assert.deepEqual(validateEnvelope(big), { ok: false, error: 'oversize' });
   const many = Array.from({ length: envelopeLimits.findings + 1 }, (_, i) => {
-    const base = { ...finding(), message: `m${i}` };
+    const base = { ...finding(), message: `m${String(i)}` };
     return { ...base, fingerprint: findingFingerprint('eslint', base) };
   });
   assert.equal(validateEnvelope(envelope({ findings: many })).ok, false);
@@ -225,7 +225,6 @@ await test('ESLint import yields detailed, stable, validated findings', () => {
   );
   const first = parseEslintFindings(raw, context);
   assert.equal(first.status, 'parsed');
-  if (first.status !== 'parsed') return;
   const e = first.envelope;
   assert.equal(e.status, 'completed');
   assert.equal(e.provenance, 'imported-unverified');

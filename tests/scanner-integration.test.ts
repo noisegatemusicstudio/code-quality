@@ -56,7 +56,7 @@ async function fixture() {
   await mkdir(join(directory, 'src'));
   const code = Array.from(
     { length: 30 },
-    (_, i) => `export const value${i} = ${i} + 3;`,
+    (_, i) => `export const value${String(i)} = ${String(i)} + 3;`,
   ).join('\n');
   await writeFile(join(directory, 'src/a.ts'), code);
   await writeFile(join(directory, 'src/b.ts'), code);
@@ -163,9 +163,9 @@ await test('exit/report consistency rejects impossible native completion claims'
   assert.equal(acceptExternalReport('jscpd', 0, clones, snapshot), null);
   const accepted = acceptExternalReport('jscpd', 42, clones, snapshot);
   assert.equal(accepted?.findingCount, 1);
-  assert.equal(accepted?.coveredFileCount, 2);
+  assert.equal(accepted.coveredFileCount, 2);
   // Detailed findings come from the shared parser: one per clone side.
-  assert.equal(accepted?.findings.length, 2);
+  assert.equal(accepted.findings.length, 2);
   const contradictory = Buffer.from(
     clones.toString().replace('"clones":1', '"clones":0'),
   );
@@ -290,8 +290,7 @@ await test(
       });
       assert.equal(report.cleanup, 'completed');
       assert.equal(report.importedCoverage?.status, 'parsed');
-      if (report.importedCoverage?.status === 'parsed')
-        assert.equal(report.importedCoverage.metrics.lines.percentage, 50);
+      assert.equal(report.importedCoverage.metrics.lines.percentage, 50);
       assert.equal(report.status, 'incomplete');
       assert.ok(
         report.scanners
@@ -307,10 +306,11 @@ await test(
               slot.state === 'limited',
           ),
       );
-      const osv = report.scanners.find((slot) => slot.id === 'osv')!;
+      const osv = report.scanners.find((slot) => slot.id === 'osv');
+      assert.ok(osv);
       assert.equal(osv.findingCount, 1);
       assert.equal(osv.database?.completeness, 'unverified');
-      assert.equal(osv.database?.sha256, database.sha256);
+      assert.equal(osv.database.sha256, database.sha256);
       assert.equal(osv.coveredFileCount, 1);
       assert.equal(osv.state, 'limited');
       assert.ok(!JSON.stringify(report).includes('synthetic-package'));

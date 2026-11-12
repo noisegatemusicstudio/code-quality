@@ -99,12 +99,12 @@ await test('parser keeps only rule, path and location', () => {
     report(record(), record({ StartLine: 7, EndLine: 7 })),
   );
   assert.equal(parsed?.findings.length, 2);
-  assert.equal(parsed?.partial, undefined);
+  assert.equal(parsed.partial, undefined);
   const text = JSON.stringify(parsed);
   assert.doesNotMatch(text, /REDACTED|Match|Secret|key =/);
-  assert.equal(parsed?.findings[0]?.ruleId, 'aws-access-token');
-  assert.equal(parsed?.findings[0]?.path, 'src/config.ts');
-  assert.match(parsed?.findings[0]?.fingerprint ?? '', /^sha256:[a-f0-9]{64}$/);
+  assert.equal(parsed.findings[0]?.ruleId, 'aws-access-token');
+  assert.equal(parsed.findings[0]?.path, 'src/config.ts');
+  assert.match(parsed.findings[0]?.fingerprint ?? '', /^sha256:[a-f0-9]{64}$/);
 });
 
 await test('benign and empty reports yield no findings', () => {
@@ -143,7 +143,7 @@ await test('unsafe paths and bad locations are dropped as incomplete', () => {
     ),
   );
   assert.equal(parsed?.findings.length, 1);
-  assert.equal(parsed?.partial, 'invalid-output');
+  assert.equal(parsed.partial, 'invalid-output');
   assert.equal(parseGitleaksReport('{}'), undefined);
   assert.equal(parseGitleaksReport('[1]'), undefined);
 });
@@ -286,7 +286,7 @@ const today = new Date('2026-11-12T10:00:00Z');
 const fixture = async () => {
   const envelope = await run('leaks');
   const [a, b] = envelope.findings;
-  assert.ok(a && b);
+  assert.ok(envelope.findings.length >= 2);
   const exception = (f: typeof a, over: Partial<GitleaksException> = {}) => ({
     fingerprint: f.fingerprint,
     ruleId: f.ruleId,

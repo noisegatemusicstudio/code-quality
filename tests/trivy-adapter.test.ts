@@ -46,25 +46,25 @@ await test('parser reports package, advisory, severity source and fix version', 
   assert.equal(parsed.vulnerabilities.length, 4);
   assert.equal(parsed.envelope.length, 4);
   const os = parsed.vulnerabilities[0];
-  assert.deepEqual(os?.package, {
+  assert.deepEqual(os.package, {
     name: 'libssl3',
     version: '3.1.2-r0',
     ecosystem: 'alpine',
   });
-  assert.equal(os?.advisory.id, 'CVE-2023-5363');
-  assert.deepEqual(os?.severity, { label: 'HIGH', source: 'nvd' });
-  assert.deepEqual(os?.fixedVersions, ['3.1.4-r0']);
-  assert.equal(os?.artefactKind, 'image');
+  assert.equal(os.advisory.id, 'CVE-2023-5363');
+  assert.deepEqual(os.severity, { label: 'HIGH', source: 'nvd' });
+  assert.deepEqual(os.fixedVersions, ['3.1.4-r0']);
+  assert.equal(os.artefactKind, 'image');
   const lodash = parsed.vulnerabilities[1];
-  assert.equal(lodash?.package.ecosystem, 'npm');
-  assert.equal(lodash?.artefactPath, 'app/package-lock.json');
-  assert.deepEqual(lodash?.severity, { label: 'HIGH', source: 'ghsa' });
+  assert.equal(lodash.package.ecosystem, 'npm');
+  assert.equal(lodash.artefactPath, 'app/package-lock.json');
+  assert.deepEqual(lodash.severity, { label: 'HIGH', source: 'ghsa' });
   const nofix = parsed.vulnerabilities.find(
     (v) => v.package.name === 'left-pad',
   );
   assert.deepEqual(nofix?.fixedVersions, []);
   assert.match(parsed.envelope[3]?.message ?? '', /no fix known/);
-  assert.equal(parsed.envelope[0]?.fingerprint, os?.fingerprint);
+  assert.equal(parsed.envelope[0]?.fingerprint, os.fingerprint);
   assert.deepEqual(parseTrivyReport(vulnerableImage), parsed);
 });
 
@@ -81,12 +81,12 @@ await test('misconfigurations carry path, resource, rule, severity and remediati
   // The PASS entry is not a finding.
   assert.equal(parsed.misconfigurations.length, 2);
   const first = parsed.misconfigurations[0];
-  assert.equal(first?.path, 'main.tf');
-  assert.equal(first?.resource, 'aws_s3_bucket.logs');
-  assert.equal(first?.ruleId, 'AWS-0086');
-  assert.equal(first?.severity, 'HIGH');
-  assert.match(first?.remediation ?? '', /public ACL/);
-  assert.deepEqual([first?.startLine, first?.endLine], [5, 9]);
+  assert.equal(first.path, 'main.tf');
+  assert.equal(first.resource, 'aws_s3_bucket.logs');
+  assert.equal(first.ruleId, 'AWS-0086');
+  assert.equal(first.severity, 'HIGH');
+  assert.match(first.remediation ?? '', /public ACL/);
+  assert.deepEqual([first.startLine, first.endLine], [5, 9]);
   assert.equal(parsed.envelope[0]?.range.startLine, 5);
   assert.equal(parsed.vulnerabilities.length, 0);
 });

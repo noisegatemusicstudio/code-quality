@@ -153,24 +153,24 @@ await test('parser keeps rule, CWE, severity, confidence, range, flow locations 
   assert.equal(findings.length, 2);
   const eval_ = findings.find((f) => f.path === 'src/a.ts');
   assert.equal(eval_?.ruleId, 'releaseready.js.no-eval');
-  assert.equal(eval_?.nativeSeverity, 'ERROR');
-  assert.deepEqual(eval_?.range, {
+  assert.equal(eval_.nativeSeverity, 'ERROR');
+  assert.deepEqual(eval_.range, {
     startLine: 4,
     startColumn: 3,
     endLine: 4,
     endColumn: 20,
   });
-  assert.match(eval_?.message ?? '', /^Vulnerability: .*\(CWE-95\)$/);
-  const d = details[eval_?.fingerprint ?? ''];
-  assert.equal(d?.kind, 'vulnerability');
-  assert.equal(d?.confidence, 'HIGH');
-  assert.deepEqual(d?.cwe, ['CWE-95']);
-  assert.deepEqual(d?.dataflow, {
+  assert.match(eval_.message, /^Vulnerability: .*\(CWE-95\)$/);
+  const d = details[eval_.fingerprint];
+  assert.equal(d.kind, 'vulnerability');
+  assert.equal(d.confidence, 'HIGH');
+  assert.deepEqual(d.cwe, ['CWE-95']);
+  assert.deepEqual(d.dataflow, {
     source: { path: 'src/a.ts', line: 2 },
     intermediateCount: 1,
     sink: { path: 'src/a.ts', line: 4 },
   });
-  assert.equal(d?.remediation, 'Replace dynamic evaluation with a lookup.');
+  assert.equal(d.remediation, 'Replace dynamic evaluation with a lookup.');
   assert.doesNotMatch(
     JSON.stringify({ findings, details }),
     /dummy-not-real|apiKey/,
@@ -182,10 +182,10 @@ await test('low-confidence findings are review-required hotspots, not vulnerabil
   const hotspot = findings.find((f) => f.path === 'src/b.ts');
   assert.match(hotspot?.message ?? '', /^Review required: /);
   assert.equal(
-    details[hotspot?.fingerprint ?? '']?.kind,
+    details[hotspot?.fingerprint ?? ''].kind,
     'review-required-hotspot',
   );
-  assert.deepEqual(details[hotspot?.fingerprint ?? '']?.cwe, ['CWE-829']);
+  assert.deepEqual(details[hotspot?.fingerprint ?? ''].cwe, ['CWE-829']);
   // No stated confidence must not be promoted to a vulnerability.
   const bare = parseSemgrepReport(
     json({
@@ -387,7 +387,7 @@ await test('starter rule files are valid YAML with required fields', async () =>
     .sort((a, b) => a.localeCompare(b, 'en'));
   assert.ok(
     files.length >= 5 && files.length <= 8,
-    `rule count ${files.length}`,
+    `rule count ${String(files.length)}`,
   );
   const ids = new Set<string>();
   for (const file of files) {

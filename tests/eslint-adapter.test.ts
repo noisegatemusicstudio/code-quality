@@ -67,7 +67,7 @@ await test(
       'duplication',
     ]);
     assert.equal(r.report.versions?.eslint, '10.13.0');
-    assert.equal(r.report.versions?.parser, '8.72.1');
+    assert.equal(r.report.versions.parser, '8.72.1');
     assert.equal(r.envelope.engine.version, '10.13.0');
     assert.equal(r.envelope.rulesetVersion, 'typescript-eslint-8.72.1');
     assert.equal(r.report.lintedFiles, 2);
@@ -197,9 +197,10 @@ await test(
   'output is bounded: oversize reports fail closed',
   { skip: !linux },
   async () => {
-    const many = Array.from({ length: 4000 }, (_, i) => `var v${i} = 1;`).join(
-      '\n',
-    );
+    const many = Array.from(
+      { length: 4000 },
+      (_, i) => `var v${String(i)} = 1;`,
+    ).join('\n');
     const r = await run({ 'big.js': many });
     assert.ok(['failed', 'incomplete'].includes(r.envelope.status));
     assert.notEqual(r.envelope.status, 'completed');

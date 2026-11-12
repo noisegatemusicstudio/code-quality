@@ -303,13 +303,13 @@ await test('API reports sanitized opt-in metadata without native execution and i
     assert.equal(accepted.state, 'limited');
     assert.equal(accepted.evidence, 'none');
     assert.equal(accepted.database?.validationProfile, 'npm-metadata-v1');
-    assert.equal(accepted.database?.schemaConformance, 'metadata-warnings');
-    assert.deepEqual(accepted.database?.metadataWarningCounts, {
+    assert.equal(accepted.database.schemaConformance, 'metadata-warnings');
+    assert.deepEqual(accepted.database.metadataWarningCounts, {
       records: 1,
       referenceUriFormat: 1,
       cvssV4TrailingSlash: 0,
     });
-    assert.equal(accepted.database?.completeness, 'unverified');
+    assert.equal(accepted.database.completeness, 'unverified');
     assert.equal(hash(await readFile(archivePath)), database.sha256);
     for (const forbidden of [directory, 'example.invalid', 'GHSA-'])
       assert.ok(!JSON.stringify(accepted).includes(forbidden));

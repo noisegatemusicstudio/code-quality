@@ -123,6 +123,7 @@ export function parseCoverageDetail(
     Buffer.byteLength(raw, 'utf8') > limit
   )
     return result('invalid');
+  // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition -- exported API: JS callers can pass any format at runtime.
   if (format !== 'json-summary' && format !== 'coverage-final')
     return result('unsupported');
   if (/^\s*(TN:|SF:)/.test(raw) || !/^\s*\{/.test(raw))
@@ -164,7 +165,7 @@ export function parseCoverageDetail(
   const files: FileCoverage[] = [];
   const excluded: string[] = [];
   const unmatched: string[] = [];
-  let budget = coverageInputLimits.entries;
+  const budget = entryBudget(coverageInputLimits.entries);
   for (const { key, value } of entries) {
     const reported = toRepositoryPath(key, ctx.pathRoot);
     if (reported === undefined) {
@@ -186,8 +187,8 @@ export function parseCoverageDetail(
     const parsed =
       format === 'json-summary'
         ? summaryEntry(path, value)
-        : finalEntry(path, value, () => budget--);
-    if (!parsed || budget < 0) return result('invalid');
+        : finalEntry(path, value, budget.take);
+    if (!parsed || budget.exhausted()) return result('invalid');
     files.push(parsed);
   }
   if (unmatched.length > 0)
@@ -279,5 +280,14 @@ function finalEntry(
     },
     lineHits,
     branchHits,
+  };
+}
+
+/** Counts parsed entries down; `exhausted` once more were taken than allowed. */
+function entryBudget(limit: number) {
+  let left = limit;
+  return {
+    take: () => left--,
+    exhausted: () => left < 0,
   };
 }

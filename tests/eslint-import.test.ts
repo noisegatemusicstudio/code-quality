@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { parseEslintJson as parse } from '../src/eslint-import.js';
+import { omitKey } from './omit-key.js';
 const file = () => ({
   messages: [] as unknown[],
   suppressedMessages: [] as unknown[],
@@ -15,16 +16,12 @@ const parsed = (findingCount: number) => ({ status: 'parsed', findingCount });
 const read = (value: unknown) => parse(JSON.stringify(value));
 await test('inherited required fields and fatal metadata never supply own values', () => {
   for (const key of [...Object.keys(file()), 'severity', 'fatal']) {
-    const f: Record<string, unknown> = { ...file() };
-    if (key === 'severity') {
-      f.messages = [{}];
-      f.errorCount = 1;
-    } else if (key === 'fatal') {
-      f.messages = [{ severity: 2 }];
-      f.errorCount = 1;
-    } else {
-      delete f[key];
-    }
+    const f: Record<string, unknown> =
+      key === 'severity'
+        ? { ...file(), messages: [{}], errorCount: 1 }
+        : key === 'fatal'
+          ? { ...file(), messages: [{ severity: 2 }], errorCount: 1 }
+          : omitKey(file(), key);
     const raw = JSON.stringify([f]);
     const previous = Object.getOwnPropertyDescriptor(Object.prototype, key);
     let reads = 0;
@@ -89,8 +86,7 @@ await test('runtime type, syntax and root/file shapes fail closed', () => {
   ])
     assert.deepEqual(read([f]), invalid);
   for (const key of Object.keys(file())) {
-    const f: Record<string, unknown> = { ...file() };
-    delete f[key];
+    const f = omitKey(file(), key);
     assert.deepEqual(read([f]), invalid);
   }
 });

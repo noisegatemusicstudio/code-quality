@@ -197,11 +197,11 @@ export function decideWithGate(
   }
   if (blocking)
     reasons.push(
-      `${blocking} new finding(s) at or above ${gate.newIssues.failOnSeverity}`,
+      `${String(blocking)} new finding(s) at or above ${gate.newIssues.failOnSeverity}`,
     );
   if (secrets > gate.secrets.maxFindings)
     reasons.push(
-      `${secrets} secret finding(s), allowed ${gate.secrets.maxFindings}`,
+      `${String(secrets)} secret finding(s), allowed ${String(gate.secrets.maxFindings)}`,
     );
   const measure = (
     label: string,
@@ -214,13 +214,14 @@ export function decideWithGate(
     if (value === null) {
       if (unknown === 'fail')
         reasons.push(`${label} not measured${why ? ` (${why})` : ''}`);
-    } else if (!ok(value)) reasons.push(`${label} ${value}%, required ${rule}`);
+    } else if (!ok(value))
+      reasons.push(`${label} ${String(value)}%, required ${rule}`);
   };
   measure(
     'new-code coverage',
     measures.newCodeCoveragePercent,
     (n) => n >= gate.newCodeCoverage.minPercent,
-    `>= ${gate.newCodeCoverage.minPercent}%`,
+    `>= ${String(gate.newCodeCoverage.minPercent)}%`,
     gate.newCodeCoverage.onUnknown,
     measures.newCodeCoverageUnknown,
   );
@@ -228,7 +229,7 @@ export function decideWithGate(
     'new-code duplication',
     measures.newCodeDuplicationPercent,
     (n) => n <= gate.newCodeDuplication.maxPercent,
-    `<= ${gate.newCodeDuplication.maxPercent}%`,
+    `<= ${String(gate.newCodeDuplication.maxPercent)}%`,
     gate.newCodeDuplication.onUnknown,
     measures.newCodeDuplicationUnknown,
   );

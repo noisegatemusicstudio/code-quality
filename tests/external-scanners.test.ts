@@ -113,7 +113,7 @@ await test(
       await mkdir(join(directory, 'src'));
       const code = Array.from(
         { length: 30 },
-        (_, i) => `export const value${i} = ${i} + 3;`,
+        (_, i) => `export const value${String(i)} = ${String(i)} + 3;`,
       ).join('\n');
       await writeFile(join(directory, 'src/a.ts'), code);
       await writeFile(join(directory, 'src/b.ts'), code);

@@ -95,7 +95,7 @@ export function renderLanguages(
     '| --- | ---: | --- |',
     ...languages.map(
       (l) =>
-        `| ${l.language} | ${l.files} | ${l.status === 'covered' ? `analysed by ${l.engines.join(', ')}` : l.status} |`,
+        `| ${l.language} | ${String(l.files)} | ${l.status === 'covered' ? `analysed by ${l.engines.join(', ')}` : l.status} |`,
     ),
     '',
     '"skipped: no engine yet" means no language-specific analysis ran. It is not a clean result.',

@@ -30,7 +30,7 @@ export function makeSyntheticOsvZip(entries: SyntheticZipEntry[]): Buffer {
   const centrals: Buffer[] = [];
   let offset = 0;
   entries.forEach((entry, index) => {
-    const name = Buffer.from(entry.name ?? `synthetic-${index}.json`);
+    const name = Buffer.from(entry.name ?? `synthetic-${String(index)}.json`);
     const raw =
       entry.data ??
       Buffer.from(

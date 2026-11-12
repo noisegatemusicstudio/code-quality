@@ -84,7 +84,7 @@ async function run(args: string[]): Promise<number> {
     (failOnOption !== undefined && !isSeverity(failOnOption))
   ) {
     process.stderr.write(
-      `invalid input: ${unknown.length ? `unknown scanners ${unknown.join(', ')}` : `fail-on-severity ${failOnOption}`}\n`,
+      `invalid input: ${unknown.length ? `unknown scanners ${unknown.join(', ')}` : `fail-on-severity ${failOnOption ?? ''}`}\n`,
     );
     return 2;
   }

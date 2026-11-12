@@ -9,6 +9,8 @@ export const engineIds = [
   'trivy',
   'semgrep',
   'jscpd',
+  'ruff',
+  'mypy',
 ] as const;
 export type EngineId = (typeof engineIds)[number];
 export type EngineStatus = 'completed' | 'failed' | 'incomplete' | 'skipped';
@@ -76,6 +78,7 @@ const isEngine = (value: string): value is EngineId =>
 
 const eslintExtension = /\.(?:[cm]?[jt]s)$/;
 const semgrepExtension = /\.(?:[cm]?[jt]s|[jt]sx)$/;
+const pythonExtension = /\.pyi?$/;
 const iacFile =
   /(?:\.(?:tf|tfvars|tf\.json|ya?ml|json|toml)|(?:^|\/)(?:Dockerfile|Containerfile)(?:\.[A-Za-z0-9_-]+)?)$/;
 /** Lockfiles osv-scanner understands; the offline adapter itself is npm-only. */
@@ -125,6 +128,8 @@ export function detectApplicability(
     semgrep: some((p) => semgrepExtension.test(p))
       ? yes
       : no('no JavaScript or TypeScript files'),
+    ruff: some((p) => pythonExtension.test(p)) ? yes : no('no Python files'),
+    mypy: some((p) => pythonExtension.test(p)) ? yes : no('no Python files'),
   };
 }
 
@@ -150,6 +155,16 @@ export function normaliseSeverity(
         : label === 'info'
           ? 'low'
           : 'high';
+  if (engine === 'ruff') {
+    // Ruff has no severity; the adapter labels each finding by rule family.
+    const ruff: Record<string, Severity> = {
+      error: 'high',
+      security: 'medium',
+      bug: 'medium',
+      convention: 'low',
+    };
+    return ruff[label] ?? 'high';
+  }
   const table: Record<string, Severity> = {
     critical: 'critical',
     high: 'high',

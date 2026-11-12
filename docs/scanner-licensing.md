@@ -149,3 +149,9 @@ separate, unbundled binaries; nothing is redistributed.
 | yamllint            | 1.38.0          | GPL-3.0                                                 | Internal **proceed**; customer **needs review** |
 | markdownlint / cli2 | 0.42.1 / 0.24.1 | MIT                                                     | **Proceed**                                     |
 | Prettier            | 3.9.10          | MIT (package metadata; upstream LICENSE not re-fetched) | **Proceed**                                     |
+
+### Ruff and mypy (RRDSCRUM-187)
+
+- Ruff 0.17.4: MIT. Pinned from the official linux x86_64 release tarball (`ruff-x86_64-unknown-linux-gnu.tar.gz`, sha256 `3ab2b34a...` equals the upstream `.sha256` file) and the extracted executable (`4ef33997...`); both are verified by `quality-scan-cli install` before the file becomes executable. Run as a separate, unmodified binary; nothing is redistributed. Ruff's `S` rules are a reimplementation of flake8-bandit, so no bandit install is needed. Notice duty: keep the MIT copyright text if the binary is ever shipped.
+- Rule set: E, F, W, I, B, UP, S, C4, SIM, PL from a bundled inline config with `--isolated`. The project's `pyproject.toml`, `ruff.toml` and `.ruff.toml` are never read; the adapter copies only `.py` and `.pyi` files into its workspace.
+- mypy 2.4.1: MIT. **Not run by the hosted scan.** `mypy --strict` needs the project's dependencies installed to resolve imports (otherwise it reports import errors or silently treats them as `Any`), and a scan must not install project dependencies or run project code. The engine is therefore reported as `skipped: needs dependency environment`, never clean. It stays opt-in until a reviewed, customer-supplied dependency environment input exists (the same shape as follow-up slice 13). No mypy artefact is pinned or installed, so there is nothing to verify; pin one in the slice that makes it runnable.

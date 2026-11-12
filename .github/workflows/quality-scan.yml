@@ -13,7 +13,7 @@ on:
         type: string
         default: 22.23.4
       scanners:
-        description: 'Comma list of eslint, gitleaks, osv, trivy, semgrep, jscpd, or all (applicable engines only).'
+        description: 'Comma list of eslint, gitleaks, osv, trivy, semgrep, jscpd, ruff, mypy, or all (applicable engines only). ruff is installed sha256-verified by the step below; mypy is reported as skipped (needs dependency environment).'
         type: string
         default: all
       code-quality-ref:

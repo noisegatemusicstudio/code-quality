@@ -26,7 +26,7 @@ const rules: readonly LanguageRule[] = [
     test: ext(/\.(?:[cm]?js|jsx)$/),
     engines: ['eslint', 'semgrep'],
   },
-  { language: 'Python', test: ext(/\.pyi?$/), engines: [] },
+  { language: 'Python', test: ext(/\.pyi?$/), engines: ['ruff'] },
   { language: 'Java', test: ext(/\.java$/), engines: [] },
   { language: 'Kotlin', test: ext(/\.kts?$/), engines: [] },
   { language: 'Swift', test: ext(/\.swift$/), engines: [] },

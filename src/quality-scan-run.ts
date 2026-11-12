@@ -31,11 +31,13 @@ import {
   type GitleaksException,
   classifyGitleaksEnvelope,
 } from './gitleaks-adapter.js';
+import { ruffVersion, runRuffScan } from './ruff-adapter.js';
 import { osvLockfileNames, runOsvScan } from './osv-adapter.js';
 import { adapterLimits } from './scanner-adapter.js';
 import {
   externalPins,
   osvPin,
+  mypyPin,
   releaseAssets,
   trivyPin,
 } from './scanner-pins.js';
@@ -69,12 +71,13 @@ export const defaultDownloader: Downloader = async (url) => {
   return bytes;
 };
 
-export type InstallableEngine = 'gitleaks' | 'trivy' | 'osv' | 'jscpd';
+export type InstallableEngine = 'gitleaks' | 'trivy' | 'osv' | 'jscpd' | 'ruff';
 export const installableEngines: readonly InstallableEngine[] = [
   'gitleaks',
   'trivy',
   'osv',
   'jscpd',
+  'ruff',
 ];
 
 /**
@@ -545,6 +548,37 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     );
   });
 
+  await guard('ruff', async () => {
+    const executable = options.tools.ruff;
+    if (!executable)
+      return failed(
+        'ruff',
+        options.installErrors.ruff ?? 'ruff is not installed',
+      );
+    const { files, omitted, causes } = await readBoundedFiles(
+      options.repo,
+      paths,
+      (p) => /\.pyi?$/.test(p),
+    );
+    const result = await runRuffScan({
+      executable,
+      scope: options.scope,
+      files,
+    });
+    return applyOmitted(
+      fromEnvelope('ruff', result, ruffVersion),
+      omitted,
+      causes,
+    );
+  });
+
+  await guard('mypy', () =>
+    Promise.resolve({
+      ...skipped('mypy', 'unavailable', mypyPin.skipReason),
+      version: mypyPin.version,
+    }),
+  );
+
   await guard('trivy', async () => {
     const executable = options.tools.trivy;
     if (!executable || !(await executableMatches(executable, trivyPin.sha256)))
@@ -687,6 +721,15 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     }
   }
   return (
-    ['eslint', 'gitleaks', 'osv', 'trivy', 'semgrep', 'jscpd'] as const
+    [
+      'eslint',
+      'gitleaks',
+      'osv',
+      'trivy',
+      'semgrep',
+      'jscpd',
+      'ruff',
+      'mypy',
+    ] as const
   ).map((id) => out.get(id) ?? failed(id, 'no result'));
 }

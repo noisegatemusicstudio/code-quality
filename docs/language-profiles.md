@@ -103,8 +103,9 @@ Corrections to the expected candidates:
   customer config or tsconfig, so it runs the syntax-only `strict` and
   `stylistic` sets. **Limitation:** the type-aware rules (for example
   `no-unnecessary-condition`, `no-floating-promises`) do not run in hosted
-  scans; they run in the caller's own `lint`. The report does not claim
-  type-aware coverage.
+  scans unless the caller opts in with `eslint-tsconfig` (follow-up slice 13,
+  below); they always run in the caller's own `lint`. Without the opt-in the
+  report does not claim type-aware coverage.
 - This repository lints itself with the same `strict-type-checked` profile it
   ships; no rule is switched off in its own `eslint.config.ts`. The only
   exceptions are a few targeted, commented `no-unnecessary-condition` disables
@@ -240,6 +241,37 @@ tflint), YAML (yamllint, Prettier) and Markdown (markdownlint, Prettier) count a
 12. New-code coverage and duplication measures wired into the gate. **Done**
     (`onUnknown` stays `report`; flipping it to `fail` is a separate decision).
 13. Type-aware ESLint for customers: opt-in input that supplies a reviewed
-    tsconfig.
+    tsconfig. **Done.**
+    - Workflow input `eslint-tsconfig` / CLI `--eslint-tsconfig <path>`
+      (`src/eslint-tsconfig.ts`). Empty (the default) leaves ESLint exactly as
+      before: syntax-only `strict` + `stylistic`, config version `bundled-1`.
+    - The path must be repo-relative, a tracked file, free of `..` and
+      `node_modules`, and end in `.json`. A malformed path is rejected by the
+      CLI as invalid input (exit 2); an untracked, unreadable or invalid file
+      makes the ESLint engine `failed` with reason `tsconfig-rejected: ...`.
+      An explicit opt-in is never silently downgraded to a syntax-only run.
+    - Every `extends` entry (string or array) must be a relative path to a
+      tracked repository file that stays inside the repository (a missing
+      `.json` suffix is added, as TypeScript does). A package
+      (`@tsconfig/node20/...`), an absolute path or anything under
+      `node_modules` is refused with the reason. The chain is bounded (depth
+      10, 20 files). Nothing is installed, built or executed.
+    - ESLint gets that tsconfig only: `--parser-options project:./<path>`, with
+      the bundled `strict-type-checked` + `stylistic-type-checked` sets
+      (`eslint-scan-config-typed.ts`, config version `bundled-typed-1`). The
+      scanned repository's `node_modules`, plugins and ESLint config are never
+      used; only the tracked tsconfig chain and the scanned source files are
+      copied into the private workspace.
+    - Dependencies are not installed, so imports that bind something and do
+      not resolve (including Node built-ins without `@types/node`) degrade
+      type information. An internal probe rule (`releaseready/unresolved-module`,
+      never a finding) detects them: the run is `incomplete` with reason
+      `type-info-partial`, and the summary lists up to 10 modules (the report
+      `typeAware.unresolvedModules` holds a sorted sample of 20 and the full
+      count). Findings from resolvable code still report. A TS file the
+      tsconfig does not include is a `parse-failure`, not a clean file.
+    - Bounds: the run uses the adapter ceiling (120 s) and a 2 GiB heap limit;
+      a timeout is `incomplete`/`timeout`, running out of memory is `failed`
+      (`engine-error`). Output is capped as for every adapter.
 14. Counsel review of every "customer: needs review" tool.
 15. Inventory the six repositories that could not be read. **Done** (12 Nov 2026).

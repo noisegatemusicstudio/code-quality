@@ -20,6 +20,7 @@ import {
 } from './quality-manifest.js';
 import { detectLanguages } from './language-detection.js';
 import { resolveJava } from './java-runtime.js';
+import { tsconfigPathProblem } from './eslint-tsconfig.js';
 import { loadGate, decideWithGate, gateMeasuresFrom } from './quality-gate.js';
 import { computeNewCode, readCoverageReport } from './new-code.js';
 import {
@@ -150,6 +151,17 @@ async function run(args: string[]): Promise<number> {
     process.stderr.write(`invalid input: ${local.error}\n`);
     return 2;
   }
+  // Optional type-aware ESLint. An empty value means "not requested".
+  const tsconfigOption = option(args, 'eslint-tsconfig');
+  const eslintTsconfig = tsconfigOption === '' ? undefined : tsconfigOption;
+  const tsconfigProblem =
+    eslintTsconfig === undefined
+      ? undefined
+      : tsconfigPathProblem(eslintTsconfig);
+  if (tsconfigProblem) {
+    process.stderr.write(`invalid input: ${tsconfigProblem.detail}\n`);
+    return 2;
+  }
   const enforce = option(args, 'enforce') === 'true';
   // Reviewed, time-bounded gitleaks exceptions. Pull requests use the BASE
   // commit's file only; see loadExceptions.
@@ -254,6 +266,7 @@ async function run(args: string[]): Promise<number> {
       option(args, 'rules') ?? join(repo, 'rules/semgrep'),
     ),
     osvMode,
+    ...(eslintTsconfig === undefined ? {} : { eslintTsconfig }),
   });
   const now = new Date();
   const results = scanned.map((r) =>

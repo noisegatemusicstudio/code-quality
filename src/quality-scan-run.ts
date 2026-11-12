@@ -21,7 +21,8 @@ import {
   validateEnvelope,
 } from './adapter-envelope.js';
 import { scanCommittedSource, type ExecutionSlot } from './customer-scan.js';
-import { runEslintScan } from './eslint-adapter.js';
+import { type EslintScanReport, runEslintScan } from './eslint-adapter.js';
+import { resolveTsconfigChain } from './eslint-tsconfig.js';
 import {
   type PrettierScanReport,
   approvedPrettierVersion as prettierVersion,
@@ -411,6 +412,28 @@ export function withParseFailures(
 }
 
 /**
+ * Say that type-aware results are partial: modules TypeScript could not
+ * resolve (dependencies are never installed) degrade some typed rules to
+ * `any`-like behaviour, so the run is `incomplete`, never clean.
+ */
+export function withTypeInfoNotes(
+  result: EngineResult,
+  report: Pick<EslintScanReport, 'typeAware'>,
+): EngineResult {
+  const typed = report.typeAware;
+  if (!typed || typed.unresolvedModuleCount === 0 || result.status === 'failed')
+    return result;
+  const shown = typed.unresolvedModules.slice(0, 10).join(', ');
+  const more = typed.unresolvedModuleCount > 10 ? ', and more' : '';
+  const note = `type-info-partial: ${String(typed.unresolvedModuleCount)} module(s) did not resolve with ${typed.tsconfig} and no installed dependencies, so some type-aware results may be missing: ${shown}${more}`;
+  const prior =
+    result.reason && result.reason !== 'type-info-partial'
+      ? `${result.reason}; `
+      : '';
+  return { ...result, reason: `${prior}${note}` };
+}
+
+/**
  * Say why a Prettier run is not a plain pass: files it could not parse, and
  * config it would not honour (JS/TS config, plugins, custom parsers), which
  * means the repository's own settings were replaced by Prettier defaults.
@@ -530,6 +553,11 @@ export interface RunOptions {
   rulesDirectory: string;
   /** `online` (default) sends package metadata to the OSV API; see the summary. */
   osvMode?: OsvMode;
+  /**
+   * Opt-in repo-relative tsconfig for type-aware ESLint. Without it ESLint runs
+   * exactly as before. See eslint-tsconfig.ts for what is accepted.
+   */
+  eslintTsconfig?: string;
 }
 
 /** `--version` of a verified jar under the scrubbed environment; it must name the pinned version. */
@@ -797,12 +825,29 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
         /\.(?:[cm]?[jt]s|[jt]sx)$/.test(p) &&
         !projectEslintConfig.test(baseName(p)),
     );
-    const { envelope, report } = await runEslintScan({
-      scope: options.scope,
-      files,
-    });
+    let typed: Parameters<typeof runEslintScan>[1];
+    if (options.eslintTsconfig !== undefined) {
+      const chain = await resolveTsconfigChain(
+        options.eslintTsconfig,
+        new Set(paths),
+        async (p) =>
+          (await readBoundedFiles(options.repo, [p], () => true)).files[p],
+      );
+      // An explicit opt-in that cannot be honoured fails closed: never a silent
+      // fall back to the syntax-only run, which would look like a typed pass.
+      if (!chain.ok)
+        return failed('eslint', `tsconfig-rejected: ${chain.detail}`);
+      typed = { tsconfig: chain.path, files: chain.files };
+    }
+    const { envelope, report } = await runEslintScan(
+      { scope: options.scope, files },
+      typed,
+    );
     return applyOmitted(
-      withParseFailures(fromEnvelope('eslint', envelope, 'bundled'), report),
+      withTypeInfoNotes(
+        withParseFailures(fromEnvelope('eslint', envelope, 'bundled'), report),
+        report,
+      ),
       omitted,
       causes,
     );

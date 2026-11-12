@@ -40,6 +40,10 @@ on:
         description: 'Optional repo-relative path of an Istanbul coverage-final.json produced by the caller; the scan never runs tests. Empty: coverage is unknown.'
         type: string
         default: ''
+      eslint-tsconfig:
+        description: 'Optional opt-in for type-aware ESLint (strict-type-checked, stylistic-type-checked): repo-relative path of a tracked tsconfig .json (no "..", extends only tracked files, never node_modules). Dependencies are not installed, so unresolved imports make ESLint incomplete (type-info-partial). Empty: syntax-only rules, unchanged.'
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -57,6 +61,7 @@ jobs:
       CQ_OSV_MODE: ${{ inputs.osv-mode }}
       CQ_BASE_REF: ${{ inputs.base-ref }}
       CQ_COVERAGE: ${{ inputs.coverage-report }}
+      CQ_ESLINT_TSCONFIG: ${{ inputs.eslint-tsconfig }}
     steps:
       - name: Require a full-SHA code-quality-ref
         run: |
@@ -137,6 +142,7 @@ jobs:
           if [ -n "$CQ_BASELINE" ]; then args+=(--baseline "$CQ_BASELINE"); fi
           if [ -n "$CQ_BASE_REF" ]; then args+=(--base-ref "$CQ_BASE_REF"); fi
           if [ -n "$CQ_COVERAGE" ]; then args+=(--coverage "$GITHUB_WORKSPACE/$CQ_COVERAGE"); fi
+          if [ -n "$CQ_ESLINT_TSCONFIG" ]; then args+=(--eslint-tsconfig "$CQ_ESLINT_TSCONFIG"); fi
           node .quality-tool/dist/src/quality-scan-cli.js "${args[@]}"
         env:
           SEMGREP_BIN: ${{ steps.semgrep.outputs.bin }}

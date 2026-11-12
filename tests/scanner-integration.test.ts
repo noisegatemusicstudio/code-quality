@@ -6,6 +6,7 @@ import { requireSupportedGit } from './git-requirement.js';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import {
   mkdtemp,
   mkdir,
@@ -117,6 +118,11 @@ await test('exit/report consistency rejects impossible native completion claims'
   assert.equal(acceptExternalReport('gitleaks', 42, Buffer.from('[]')), null);
   assert.equal(acceptExternalReport('gitleaks', 1, findings), null);
   assert.equal(acceptExternalReport('gitleaks', 0, Buffer.from('[')), null);
+  // jscpd's report has no per-file lines: they come from the snapshot.
+  const snapshot = mkdtempSync(join(tmpdir(), 'jscpd-snapshot-'));
+  mkdirSync(join(snapshot, 'src'));
+  for (const name of ['a.ts', 'b.ts'])
+    writeFileSync(join(snapshot, 'src', name), 'x\n'.repeat(30));
   const clones = Buffer.from(
     JSON.stringify({
       duplicates: [
@@ -139,7 +145,8 @@ await test('exit/report consistency rejects impossible native completion claims'
       statistics: {
         formats: {
           typescript: {
-            sources: { 'src/a.ts': { lines: 30 }, 'src/b.ts': { lines: 30 } },
+            lines: 60,
+            sources: 2,
           },
         },
         total: {
@@ -153,8 +160,8 @@ await test('exit/report consistency rejects impossible native completion claims'
       },
     }),
   );
-  assert.equal(acceptExternalReport('jscpd', 0, clones), null);
-  const accepted = acceptExternalReport('jscpd', 42, clones);
+  assert.equal(acceptExternalReport('jscpd', 0, clones, snapshot), null);
+  const accepted = acceptExternalReport('jscpd', 42, clones, snapshot);
   assert.equal(accepted?.findingCount, 1);
   assert.equal(accepted?.coveredFileCount, 2);
   // Detailed findings come from the shared parser: one per clone side.
@@ -162,7 +169,11 @@ await test('exit/report consistency rejects impossible native completion claims'
   const contradictory = Buffer.from(
     clones.toString().replace('"clones":1', '"clones":0'),
   );
-  assert.equal(acceptExternalReport('jscpd', 42, contradictory), null);
+  assert.equal(
+    acceptExternalReport('jscpd', 42, contradictory, snapshot),
+    null,
+  );
+  rmSync(snapshot, { recursive: true, force: true });
   assert.equal(
     parseOsvReport(Buffer.from('{"results":[]}'), [
       '/fixture/package-lock.json',

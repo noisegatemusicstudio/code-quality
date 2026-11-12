@@ -16,15 +16,26 @@ import { detectLanguages } from './language-detection.js';
 import { loadGate, decideWithGate } from './quality-gate.js';
 import {
   applyGitleaksExceptions,
+  ExceptionSourceError,
+  loadExceptions,
+  type ExceptionLoad,
   installEngine,
   installableEngines,
-  parseExceptions,
   runEngines,
   scopeFromEnvironment,
   trackedPaths,
 } from './quality-scan-run.js';
 
 const exec = promisify(execFile);
+
+async function readIfPresent(path: string): Promise<string | undefined> {
+  try {
+    return await readFile(path, 'utf8');
+  } catch (error) {
+    if ((error as { code?: string }).code === 'ENOENT') return undefined;
+    throw error;
+  }
+}
 
 function option(args: string[], name: string): string | undefined {
   const index = args.indexOf(`--${name}`);
@@ -84,20 +95,57 @@ async function run(args: string[]): Promise<number> {
     return 2;
   }
   const enforce = option(args, 'enforce') === 'true';
-  // Reviewed, time-bounded gitleaks exceptions live in the scanned repository.
-  const exceptionsFile = resolve(
-    repo,
-    option(args, 'exceptions') ?? 'quality-exceptions.json',
-  );
-  let exceptions: ReturnType<typeof parseExceptions> = [];
+  // Reviewed, time-bounded gitleaks exceptions. Pull requests use the BASE
+  // commit's file only; see loadExceptions.
+  const exceptionsPath =
+    option(args, 'exceptions') ?? 'quality-exceptions.json';
+  const exceptionsFile = resolve(repo, exceptionsPath);
+  let loaded: ExceptionLoad;
   try {
-    exceptions = parseExceptions(await readFile(exceptionsFile, 'utf8'));
+    loaded = await loadExceptions({
+      environment: process.env,
+      readEvent: (path) => readFile(path, 'utf8'),
+      readHead: () => readIfPresent(exceptionsFile),
+      readBase: async (baseSha) => {
+        try {
+          await exec('git', [
+            '-C',
+            repo,
+            'cat-file',
+            '-e',
+            `${baseSha}^{commit}`,
+          ]);
+        } catch {
+          throw new Error('base commit missing');
+        }
+        try {
+          await exec('git', [
+            '-C',
+            repo,
+            'cat-file',
+            '-e',
+            `${baseSha}:${exceptionsPath}`,
+          ]);
+        } catch {
+          return undefined;
+        }
+        return (
+          await exec('git', [
+            '-C',
+            repo,
+            'show',
+            `${baseSha}:${exceptionsPath}`,
+          ])
+        ).stdout;
+      },
+    });
   } catch (error) {
-    if ((error as { code?: string }).code !== 'ENOENT') {
-      process.stderr.write('invalid input: exceptions file is malformed\n');
-      return 2;
-    }
+    process.stderr.write(
+      `invalid input: ${error instanceof ExceptionSourceError ? error.message : 'exceptions file is malformed'}\n`,
+    );
+    return 2;
   }
+  const exceptions = loaded.exceptions;
   let installed: {
     tools?: Record<string, string>;
     errors?: Record<string, string>;
@@ -182,6 +230,7 @@ async function run(args: string[]): Promise<number> {
     decision,
     baseline,
     languages,
+    exceptions: loaded,
   });
   await mkdir(join(out, 'envelopes'), { recursive: true });
   await writeFile(

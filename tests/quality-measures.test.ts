@@ -5,6 +5,9 @@ Evidence: synthetic
 Scope: Checks coverage, jscpd duplication and new-code measure calculations against fixed synthetic reports with known totals; does not run jscpd or customer tests.
 */
 import assert from 'node:assert/strict';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { test } from 'node:test';
 import {
   type CoverageContext,
@@ -278,15 +281,9 @@ const jscpdReport = (over: { y?: boolean } = {}) =>
   JSON.stringify({
     statistics: {
       formats: {
-        typescript: {
-          sources: {
-            '/repo/src/x.ts': { lines: 100 },
-            '/repo/src/y.ts': { lines: 50 },
-            '/repo/src/z.ts': { lines: 10 },
-          },
-        },
+        typescript: { lines: 160, sources: 3, clones: 2 },
       },
-      total: { lines: 160, clones: 2 },
+      total: { lines: 160, sources: 3, clones: 2 },
     },
     duplicates: [
       {
@@ -307,7 +304,19 @@ const jscpdReport = (over: { y?: boolean } = {}) =>
     ],
   });
 const files = ['src/x.ts', 'src/y.ts', 'src/z.ts', 'src/w.py'];
-const dctx = { pathRoot: root, files, commitSha: B, reportCommitSha: B };
+// Snapshot line counts: jscpd's report has none per file, so the parser asks.
+const snapshotLines: Record<string, number> = {
+  'src/x.ts': 100,
+  'src/y.ts': 50,
+  'src/z.ts': 10,
+};
+const dctx = {
+  pathRoot: root,
+  files,
+  commitSha: B,
+  reportCommitSha: B,
+  lineCount: (path: string) => snapshotLines[path],
+};
 
 await test('jscpd report: locations on both sides, totals, thresholds', () => {
   const d = parseJscpdReport(jscpdReport(), dctx);
@@ -319,7 +328,9 @@ await test('jscpd report: locations on both sides, totals, thresholds', () => {
     endLine: 10,
   });
   assert.deepEqual(d.totals, { covered: 35, total: 160 });
-  assert.deepEqual(d.notAnalyzed, ['src/w.py']);
+  assert.deepEqual(d.analyzed, { 'src/x.ts': 100, 'src/y.ts': 50 });
+  assert.equal(d.counting?.cloneFileLines, 'committed-snapshot-line-count');
+  assert.deepEqual(d.notAnalyzed, ['src/w.py', 'src/z.ts']);
   assert.equal(JSON.stringify(d).includes('SECRET'), false);
   assert.deepEqual(
     [d.tool.version, d.config.minLines, d.config.minTokens],
@@ -353,17 +364,39 @@ await test('jscpd report: missing, stale, unmatched and excluded', () => {
     files: ['src/x.ts'],
   });
   assert.equal(notInSet.state, 'unmatched');
+  // jscpd totals are report-wide: a scope that excludes files has no denominator.
   const ex = parseJscpdReport(jscpdReport(), {
     ...dctx,
     exclusions: ['src/y.ts'],
   });
-  assert.equal(ex.state, 'complete');
+  assert.equal(ex.state, 'unsupported');
   assert.deepEqual(ex.excluded, ['src/y.ts']);
-  assert.deepEqual(ex.totals, { covered: 0, total: 110 });
-  const tampered = jscpdReport().replace('"lines":160', '"lines":161');
+  assert.equal(ex.totals, null);
+  const tampered = jscpdReport().replace(
+    '"sources":3,"clones":2}}',
+    '"sources":1,"clones":2}}',
+  );
   assert.equal(parseJscpdReport(tampered, dctx).state, 'invalid');
-  const beyond = jscpdReport().replace('"lines":50', '"lines":5');
-  assert.equal(parseJscpdReport(beyond, dctx).state, 'invalid');
+  const clonesTampered = jscpdReport().replace(
+    '"clones":2}},"dup',
+    '"clones":9}},"dup',
+  );
+  assert.equal(parseJscpdReport(clonesTampered, dctx).state, 'invalid');
+  const shortFile = {
+    ...dctx,
+    lineCount: (p: string) => (p === 'src/y.ts' ? 5 : snapshotLines[p]),
+  };
+  assert.equal(parseJscpdReport(jscpdReport(), shortFile).state, 'invalid');
+  const unreadable = { ...dctx, lineCount: () => undefined };
+  assert.equal(parseJscpdReport(jscpdReport(), unreadable).state, 'invalid');
+  const noCounter = { ...dctx, lineCount: undefined };
+  assert.equal(parseJscpdReport(jscpdReport(), noCounter).state, 'invalid');
+  // Per-file source maps (the pre-5.4.3 assumption) are not the real shape.
+  const legacy = jscpdReport().replace(
+    '"sources":3,"clones":2}}',
+    '"sources":{"a":{"lines":1}},"clones":2}}',
+  );
+  assert.equal(parseJscpdReport(legacy, dctx).state, 'invalid');
 });
 
 await test('new-code duplication uses changed lines inside analyzed files', () => {
@@ -408,7 +441,14 @@ await test('jscpd adapter pins the version, allowlists args and emits both sides
   assert.equal(adapter.versionOutput, '5.4.3');
   assert.equal(allowedArguments(adapter, []), true);
   assert.equal(allowedArguments(adapter, ['--install']), false);
-  const parsed = adapter.parse(jscpdReport(), { sourceRoot: '/repo' });
+  // The adapter counts lines in the snapshot it was given, not in the report.
+  const snapshot = mkdtempSync(join(tmpdir(), 'jscpd-adapter-'));
+  mkdirSync(join(snapshot, 'src'));
+  for (const [path, lines] of Object.entries(snapshotLines))
+    writeFileSync(join(snapshot, path), 'x\n'.repeat(lines));
+  const reportAt = jscpdReport().replaceAll('/repo/', `${snapshot}/`);
+  const parsed = adapter.parse(reportAt, { sourceRoot: snapshot });
+  rmSync(snapshot, { recursive: true, force: true });
   assert.equal(parsed?.findings.length, 4);
   assert.equal(new Set(parsed?.findings.map((f) => f.fingerprint)).size, 4);
   assert.equal(parsed?.findings[0]?.message, 'Duplicate of src/y.ts:1-10');

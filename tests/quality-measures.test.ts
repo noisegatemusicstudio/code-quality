@@ -1,3 +1,9 @@
+/*
+Test classification: unit
+Review status: Not Reviewed
+Evidence: synthetic
+Scope: Checks coverage, jscpd duplication and new-code measure calculations against fixed synthetic reports with known totals; does not run jscpd or customer tests.
+*/
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {

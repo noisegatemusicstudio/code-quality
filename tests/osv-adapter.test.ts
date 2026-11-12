@@ -1,3 +1,9 @@
+/*
+Test classification: contract
+Review status: Not Reviewed
+Evidence: synthetic
+Scope: Parses recorded synthetic OSV-Scanner JSON and runs a fake executable through the adapter to prove dedup, disclosure and skipped/incomplete states; does not run the real binary or query the OSV API.
+*/
 import assert from 'node:assert/strict';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';

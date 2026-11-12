@@ -26,9 +26,7 @@ export const measuresNotProvided = Object.freeze([
 ] as const);
 
 export type MeasureId =
-  | 'coverage.lines'
-  | 'coverage.branches'
-  | 'duplication.lines';
+  'coverage.lines' | 'coverage.branches' | 'duplication.lines';
 export type MeasureScopeKind = 'overall' | 'new-code';
 export type UnknownReason =
   | 'no-report'

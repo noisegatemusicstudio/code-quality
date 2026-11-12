@@ -1,3 +1,9 @@
+/*
+Test classification: contract
+Review status: Not Reviewed
+Evidence: synthetic
+Scope: Parses recorded synthetic Gitleaks JSON and runs a fake executable through the adapter to prove redaction, exceptions and failure states; does not run the real gitleaks binary.
+*/
 import assert from 'node:assert/strict';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
@@ -357,6 +363,6 @@ await test(
   },
 );
 
-await test.after?.(async () => {
+test.after(async () => {
   await rm(dir, { recursive: true, force: true });
 });

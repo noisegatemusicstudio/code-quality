@@ -271,7 +271,7 @@ export function parseOsvReport(
         const ids = [...new Set(cluster.flatMap((c) => c.ids))].sort(
           (a, b) => idRank(a) - idRank(b) || (a < b ? -1 : 1),
         );
-        const id = ids[0] as string;
+        const id = ids[0];
         const ranges: OsvAffectedRange[] = [];
         for (const r of cluster.flatMap((c) => c.ranges))
           if (!ranges.some((o) => JSON.stringify(o) === JSON.stringify(r)))

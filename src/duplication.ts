@@ -112,12 +112,7 @@ export interface Clone {
   second: CloneSide;
 }
 export type DuplicationState =
-  | 'complete'
-  | 'missing'
-  | 'unsupported'
-  | 'invalid'
-  | 'stale'
-  | 'unmatched';
+  'complete' | 'missing' | 'unsupported' | 'invalid' | 'stale' | 'unmatched';
 export interface DuplicationContext {
   /** Absolute checkout root relativizing report paths ('/' for none). */
   pathRoot: string;

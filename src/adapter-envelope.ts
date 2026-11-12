@@ -78,8 +78,7 @@ export interface AdapterEnvelope extends EnvelopeScope {
   findings: AdapterFinding[];
 }
 export type EnvelopeValidation =
-  | { ok: true; envelope: AdapterEnvelope }
-  | { ok: false; error: string };
+  { ok: true; envelope: AdapterEnvelope } | { ok: false; error: string };
 
 const idPattern = /^[A-Za-z0-9][A-Za-z0-9._:-]{0,127}$/;
 const repositoryPattern =

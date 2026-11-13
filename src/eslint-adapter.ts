@@ -153,12 +153,18 @@ export function createEslintAdapter(
     dirname(fileURLToPath(import.meta.url)),
     typed ? 'eslint-scan-config-typed.js' : 'eslint-scan-config.js',
   );
+  // Compact output: see eslint-compact-formatter.ts for why not `json`.
+  const formatter = join(
+    dirname(fileURLToPath(import.meta.url)),
+    'eslint-compact-formatter.js',
+  );
   const parse = (
     stdout: string,
     context: { sourceRoot: string },
   ): ParsedOutput | undefined => {
     // Bounded: the shared validator rejects oversize or inconsistent reports.
-    if (parseEslintJson(stdout).status !== 'parsed') return undefined;
+    if (parseEslintJson(stdout, adapterLimits.stdoutBytes).status !== 'parsed')
+      return undefined;
     const report = JSON.parse(stdout) as Record<string, unknown>[];
     const candidates: {
       finding: Omit<AdapterFinding, 'fingerprint'>;
@@ -273,7 +279,7 @@ export function createEslintAdapter(
         // Type information comes from this one reviewed tsconfig only.
         ...(typed ? ['--parser-options', `project:./${typed.tsconfig}`] : []),
         '--format',
-        'json',
+        formatter,
         '--no-warn-ignored',
         '.',
       ],

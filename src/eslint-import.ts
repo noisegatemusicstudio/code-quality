@@ -13,15 +13,30 @@ import {
   validateEnvelope,
 } from './adapter-envelope.js';
 
+/** Default cap for reports handed in from outside (offline import). */
+export const importByteLimit = 262144;
+/**
+ * Hard ceiling for any caller-chosen cap: the scan's own process output limit
+ * (`adapterLimits.stdoutBytes`), so a larger cap never admits more than the
+ * process could have produced.
+ */
+const adapterByteCeiling = 4194304;
+
 export type EslintImport =
   { status: 'parsed'; findingCount: number } | { status: 'invalid' };
 /** Parsing is not producer completion, execution proof, or a quality gate. */
-export function parseEslintJson(raw: unknown): EslintImport {
+export function parseEslintJson(
+  raw: unknown,
+  maxBytes: number = importByteLimit,
+): EslintImport {
   const invalid: EslintImport = { status: 'invalid' };
   if (
     typeof raw !== 'string' ||
-    raw.length > 262144 ||
-    new TextEncoder().encode(raw).length > 262144
+    !Number.isSafeInteger(maxBytes) ||
+    maxBytes < 1 ||
+    maxBytes > adapterByteCeiling ||
+    raw.length > maxBytes ||
+    new TextEncoder().encode(raw).length > maxBytes
   )
     return invalid;
   let root: unknown;

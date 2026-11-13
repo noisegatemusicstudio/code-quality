@@ -217,3 +217,20 @@ await test('UTF-8 byte cap is checked before JSON.parse', () => {
     JSON.parse = original;
   }
 });
+
+await test('the byte cap is 256 KiB by default, caller-raisable only up to the scan output limit', () => {
+  const pad = (bytes: number) =>
+    JSON.stringify([
+      {
+        ...file(),
+        filePath: 'a.ts',
+        padding: 'x'.repeat(bytes),
+      },
+    ]);
+  const big = pad(300000);
+  assert.deepEqual(parse(big), invalid, 'imports keep the 256 KiB default');
+  assert.deepEqual(parse(big, 4194304), parsed(0));
+  assert.deepEqual(parse(big, 262144), invalid);
+  for (const bad of [0, -1, 1.5, Number.NaN, 4194305])
+    assert.deepEqual(parse('[]', bad), invalid, String(bad));
+});

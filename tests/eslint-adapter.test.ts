@@ -244,3 +244,26 @@ await test(
     assert.equal(r.report.lintedFiles, 2);
   },
 );
+
+await test(
+  'ignored disable directives neither hide the finding nor make the engine incomplete',
+  { skip: !linux },
+  async () => {
+    // noInlineConfig makes ESLint ignore these directives and warn about each
+    // (no rule id). The warning is not a finding or an engine error, and the
+    // defect the directive tried to silence must still be reported.
+    const r = await run({
+      'src/line.ts':
+        '// eslint-disable-next-line no-debugger\ndebugger;\nexport const a = 1;\n',
+      'src/block.ts':
+        '/* eslint-disable no-debugger */\ndebugger;\nexport const b = 1;\n',
+    });
+    assert.equal(r.envelope.status, 'completed', String(r.envelope.reason));
+    assert.equal(r.envelope.reason, undefined);
+    assert.deepEqual(rules(r), ['no-debugger', 'no-debugger']);
+    assert.deepEqual(r.envelope.findings.map((f) => f.path).sort(), [
+      'src/block.ts',
+      'src/line.ts',
+    ]);
+  },
+);

@@ -192,6 +192,18 @@ export function createEslintAdapter(
           partial = 'parse-failure';
           continue;
         }
+        // The bundled config sets noInlineConfig, so ESLint warns (no rule id)
+        // that a disable directive was ignored. That is not a finding and not
+        // an engine problem: the rule the directive tried to silence is still
+        // reported, so nothing is hidden. Anything else without a rule id still
+        // falls through to the invalid-output check below.
+        if (
+          (m.ruleId === null || m.ruleId === undefined) &&
+          m.severity === 1 &&
+          typeof m.message === 'string' &&
+          ignoredDirectiveNotice.test(m.message)
+        )
+          continue;
         const pos = (k: string): number | undefined => {
           const value = m[k];
           return typeof value === 'number' &&
@@ -290,6 +302,9 @@ export function createEslintAdapter(
   };
 }
 
+/** ESLint's notice for a disable directive ignored because of `noInlineConfig`. */
+const ignoredDirectiveNotice =
+  /^'(?:\/\/|\/\*)[^']*' has no effect because you have 'noInlineConfig' setting\b/;
 const limit = (names: string[]): string[] => names.slice(0, listLimit);
 
 /**

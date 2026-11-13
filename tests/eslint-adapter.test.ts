@@ -197,12 +197,50 @@ await test(
   'output is bounded: oversize reports fail closed',
   { skip: !linux },
   async () => {
+    // More messages than the parser accepts (10000): fail closed, never partial.
     const many = Array.from(
-      { length: 4000 },
+      { length: 12000 },
       (_, i) => `var v${String(i)} = 1;`,
     ).join('\n');
     const r = await run({ 'big.js': many });
-    assert.ok(['failed', 'incomplete'].includes(r.envelope.status));
-    assert.notEqual(r.envelope.status, 'completed');
+    assert.equal(r.envelope.status, 'failed');
+    assert.equal(r.envelope.reason, 'invalid-output');
+  },
+);
+
+await test(
+  'findings within every bound are all reported, not dropped',
+  { skip: !linux },
+  async () => {
+    const some = Array.from(
+      { length: 4000 },
+      (_, i) => `var v${String(i)} = 1;`,
+    ).join('\n');
+    const r = await run({ 'some.js': some });
+    // 4000 findings fit both bounds, so the report is complete, not dropped.
+    assert.equal(r.envelope.status, 'completed', String(r.envelope.reason));
+    assert.equal(r.envelope.findings.length, 4000);
+  },
+);
+
+await test(
+  'a large source file still completes: compact output stays within the parser cap',
+  { skip: !linux },
+  async () => {
+    // ESLint's json formatter embeds each file's full source. With this file the
+    // raw report exceeds the 256 KiB parser cap, which used to fail the whole
+    // engine as invalid-output even though ESLint ran fine.
+    const filler = Array.from(
+      { length: 12000 },
+      (_, i) => `export const v${String(i)} = ${String(i)};`,
+    ).join('\n');
+    const r = await run({
+      'src/big.ts': `${defects}\n${filler}\n`,
+      'src/ok.ts': benign,
+    });
+    assert.equal(r.envelope.status, 'completed', String(r.envelope.reason));
+    assert.ok(r.envelope.findings.length >= 3, JSON.stringify(rules(r)));
+    assert.ok(r.envelope.findings.every((f) => f.path === 'src/big.ts'));
+    assert.equal(r.report.lintedFiles, 2);
   },
 );

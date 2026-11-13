@@ -33,6 +33,13 @@ export interface ExternalResult {
     | 'source-suppression-file'
     | 'source-suppression-directive'
     | 'execution-or-report-failed'
+    | 'suppression-scan-limit'
+    | 'tool-output-limit'
+    | 'tool-failed'
+    | 'tool-exit-unexpected'
+    | 'report-too-large'
+    | 'report-invalid'
+    | 'timeout'
     | 'cleanup-uncertain';
   findingCount?: number;
   /** Detailed envelope findings; only present when requested. */
@@ -42,6 +49,9 @@ export interface ExternalResult {
   binarySha256: string;
   config: string;
 }
+
+/** Thrown by `readBoundedRegular` when the file exceeds the byte limit. */
+export class BoundedReadTooLargeError extends Error {}
 
 export async function readBoundedRegular(
   path: string,
@@ -53,7 +63,8 @@ export async function readBoundedRegular(
   );
   try {
     const stat = await handle.stat();
-    if (!stat.isFile() || stat.size > limit) throw new Error();
+    if (!stat.isFile()) throw new Error();
+    if (stat.size > limit) throw new BoundedReadTooLargeError();
     const bytes = Buffer.alloc(stat.size);
     let offset = 0;
     while (offset < bytes.length) {
@@ -191,38 +202,15 @@ async function runExternalScannerInner(
     }
   }
   if (id === 'jscpd') {
-    let files = 0;
-    let bytes = 0;
-    let directories = 0;
-    const containsSuppression = async (path: string): Promise<boolean> => {
-      if (++directories > 2000) throw new Error();
-      for (const entry of await readdir(path, { withFileTypes: true })) {
-        const target = join(path, entry.name);
-        if (entry.isDirectory()) {
-          if (await containsSuppression(target)) return true;
-        } else if (entry.isFile()) {
-          if (++files > 1000) throw new Error();
-          const data = await readBoundedRegular(target, 1048576);
-          if ((bytes += data.length) > 16777216) throw new Error();
-          if (/jscpd\s*:\s*ignore/i.test(data.toString('utf8'))) return true;
-        } else throw new Error();
-      }
-      return false;
-    };
-    try {
-      if (await containsSuppression(sourceDirectory))
-        return {
-          ...result,
-          state: 'limited',
-          reason: 'source-suppression-directive',
-        };
-    } catch {
+    const suppression = await findJscpdSuppression(sourceDirectory);
+    if (suppression === 'found')
       return {
         ...result,
-        state: 'failed',
-        reason: 'execution-or-report-failed',
+        state: 'limited',
+        reason: 'source-suppression-directive',
       };
-    }
+    if (suppression !== 'none')
+      return { ...result, state: 'failed', reason: 'suppression-scan-limit' };
   }
   const directory = await mkdtemp(join(tmpdir(), 'code-quality-external-'));
   let uncertain = false;
@@ -291,7 +279,7 @@ async function runExternalScannerInner(
       executable: '/usr/bin/prlimit',
       args: [
         '--as=8589934592:8589934592',
-        '--fsize=1048576:1048576',
+        `--fsize=${String(reportBytesCap)}:${String(reportBytesCap)}`,
         '--cpu=30:30',
         '--',
         tool,
@@ -304,22 +292,38 @@ async function runExternalScannerInner(
     inFlight = false;
     if (execution.state === 'cleanup-uncertain') uncertain = true;
     result.state = execution.state === 'timed-out' ? 'timed-out' : 'failed';
-    result.reason =
-      execution.state === 'cleanup-uncertain'
-        ? 'cleanup-uncertain'
-        : 'execution-or-report-failed';
+    result.reason = executionFailureReason(execution);
+    // `prlimit --fsize` kills the tool (SIGXFSZ) once its report reaches the cap,
+    // which looks like a plain tool failure; the truncated file names the cause.
+    if (
+      execution.state === 'failed' &&
+      (await reportReachedSizeCap(report, reportBytesCap))
+    )
+      result.reason = 'report-too-large';
     if (
       execution.state !== 'exited' ||
       (execution.code !== 0 && execution.code !== 42)
     )
       return result;
+    let reportBytes: Buffer;
+    try {
+      reportBytes = await readBoundedRegular(report, reportBytesCap);
+    } catch (error) {
+      return {
+        ...result,
+        reason:
+          error instanceof BoundedReadTooLargeError
+            ? 'report-too-large'
+            : 'report-invalid',
+      };
+    }
     const parsed = acceptExternalReport(
       id,
       execution.code,
-      await readBoundedRegular(report, 1048576),
+      reportBytes,
       sourceDirectory,
     );
-    if (parsed === null) return result;
+    if (parsed === null) return { ...result, reason: 'report-invalid' };
     return {
       ...result,
       state: 'completed',
@@ -338,6 +342,88 @@ async function runExternalScannerInner(
     };
   } finally {
     if (!uncertain) await rm(directory, { recursive: true, force: true });
+  }
+}
+
+/** Bounds of the pre-scan for in-source `jscpd:ignore` directives. */
+export const suppressionScanBounds = Object.freeze({
+  files: 1000,
+  directories: 2000,
+  fileBytes: 1048576,
+  totalBytes: 16777216,
+});
+
+/**
+ * Look for a jscpd suppression directive in the snapshot before running the
+ * engine. `limit` means the tree exceeded a bound (or held an unexpected entry
+ * type) so the absence of a directive could not be proven; the caller must not
+ * run jscpd then, and reports it with a reason that names this guard.
+ */
+export async function findJscpdSuppression(
+  sourceDirectory: string,
+  bounds: Record<
+    keyof typeof suppressionScanBounds,
+    number
+  > = suppressionScanBounds,
+): Promise<'found' | 'none' | 'limit'> {
+  let files = 0;
+  let bytes = 0;
+  let directories = 0;
+  const walk = async (path: string): Promise<boolean> => {
+    if (++directories > bounds.directories) throw new Error();
+    for (const entry of await readdir(path, { withFileTypes: true })) {
+      const target = join(path, entry.name);
+      if (entry.isDirectory()) {
+        if (await walk(target)) return true;
+      } else if (entry.isFile()) {
+        if (++files > bounds.files) throw new Error();
+        const data = await readBoundedRegular(target, bounds.fileBytes);
+        if ((bytes += data.length) > bounds.totalBytes) throw new Error();
+        if (/jscpd\s*:\s*ignore/i.test(data.toString('utf8'))) return true;
+      } else throw new Error();
+    }
+    return false;
+  };
+  try {
+    return (await walk(sourceDirectory)) ? 'found' : 'none';
+  } catch {
+    return 'limit';
+  }
+}
+
+/** Largest report a scanner may write and this module will read. */
+export const reportBytesCap = 1048576;
+
+/** True when the report exists and is at or above the cap (a truncated write). */
+export async function reportReachedSizeCap(
+  report: string,
+  cap: number,
+): Promise<boolean> {
+  try {
+    return (await lstat(report)).size >= cap;
+  } catch {
+    return false;
+  }
+}
+
+/** Name the reason a scanner process did not produce a usable exit. */
+export function executionFailureReason(execution: {
+  state: string;
+  code?: number;
+}): NonNullable<ExternalResult['reason']> {
+  switch (execution.state) {
+    case 'cleanup-uncertain':
+      return 'cleanup-uncertain';
+    case 'timed-out':
+      return 'timeout';
+    case 'output-limit':
+      return 'tool-output-limit';
+    case 'exited':
+      return execution.code === 0 || execution.code === 42
+        ? 'execution-or-report-failed'
+        : 'tool-exit-unexpected';
+    default:
+      return 'tool-failed';
   }
 }
 

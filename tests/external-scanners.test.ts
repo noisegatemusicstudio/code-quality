@@ -10,8 +10,14 @@ import { mkdtemp, mkdir, writeFile, rm, access } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import {
-  runExternalScanner,
+  BoundedReadTooLargeError,
+  executionFailureReason,
+  findJscpdSuppression,
   parseExternalReport,
+  readBoundedRegular,
+  reportReachedSizeCap,
+  runExternalScanner,
+  suppressionScanBounds,
 } from '../src/external-scanners.js';
 
 const installed = async (name: string) => {
@@ -151,3 +157,100 @@ await test(
     }
   },
 );
+
+await test('jscpd suppression pre-scan reports a bound hit as "limit", not as a clean tree', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'jscpd-prescan-'));
+  try {
+    await mkdir(join(directory, 'a/b'), { recursive: true });
+    for (let i = 0; i < 3; i += 1)
+      await writeFile(join(directory, `a/f${String(i)}.ts`), 'const x = 1;\n');
+    assert.equal(await findJscpdSuppression(directory), 'none');
+    // More files than the bound: absence of a directive is unproven.
+    assert.equal(
+      await findJscpdSuppression(directory, {
+        ...suppressionScanBounds,
+        files: 2,
+      }),
+      'limit',
+    );
+    assert.equal(
+      await findJscpdSuppression(directory, {
+        ...suppressionScanBounds,
+        directories: 1,
+      }),
+      'limit',
+    );
+    assert.equal(
+      await findJscpdSuppression(directory, {
+        ...suppressionScanBounds,
+        totalBytes: 20,
+      }),
+      'limit',
+    );
+    await writeFile(
+      join(directory, 'a/b/big.ts'),
+      Buffer.alloc(suppressionScanBounds.fileBytes + 1, 97),
+    );
+    assert.equal(await findJscpdSuppression(directory), 'limit');
+    await rm(join(directory, 'a/b/big.ts'));
+    const marker = 'jscpd' + ':ignore';
+    await writeFile(join(directory, 'a/b/s.ts'), `// ${marker}\n`);
+    assert.equal(await findJscpdSuppression(directory), 'found');
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+await test('bounded reads distinguish an oversized file from other failures', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'bounded-read-'));
+  try {
+    const path = join(directory, 'report.json');
+    await writeFile(path, Buffer.alloc(11));
+    await assert.rejects(
+      readBoundedRegular(path, 10),
+      BoundedReadTooLargeError,
+    );
+    await assert.rejects(
+      readBoundedRegular(directory, 10),
+      (error: unknown) => !(error instanceof BoundedReadTooLargeError),
+    );
+    assert.equal((await readBoundedRegular(path, 11)).length, 11);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});
+
+await test('scanner process failures map to specific reasons instead of a generic one', () => {
+  assert.equal(executionFailureReason({ state: 'timed-out' }), 'timeout');
+  assert.equal(
+    executionFailureReason({ state: 'output-limit' }),
+    'tool-output-limit',
+  );
+  assert.equal(executionFailureReason({ state: 'failed' }), 'tool-failed');
+  assert.equal(
+    executionFailureReason({ state: 'cleanup-uncertain' }),
+    'cleanup-uncertain',
+  );
+  assert.equal(
+    executionFailureReason({ state: 'exited', code: 2 }),
+    'tool-exit-unexpected',
+  );
+  assert.equal(
+    executionFailureReason({ state: 'exited', code: 42 }),
+    'execution-or-report-failed',
+  );
+});
+
+await test('a report truncated at the size cap is recognised, a small or missing one is not', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'report-cap-'));
+  try {
+    const path = join(directory, 'report.json');
+    assert.equal(await reportReachedSizeCap(path, 10), false);
+    await writeFile(path, Buffer.alloc(9));
+    assert.equal(await reportReachedSizeCap(path, 10), false);
+    await writeFile(path, Buffer.alloc(10));
+    assert.equal(await reportReachedSizeCap(path, 10), true);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
+});

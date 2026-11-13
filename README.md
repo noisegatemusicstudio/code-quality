@@ -256,7 +256,10 @@ still gates any packaging. CodeQL and Sonar analyzers are not used.
   else only HIGH/MEDIUM confidence counts as a vulnerability), dataflow
   locations (no source text) and rule remediation text. Matched code and
   `fix` are never copied. A non-empty `errors` array makes the run
-  `incomplete`/`engine-error`; unparseable output is `failed`/`invalid-output`.
+  `incomplete`: `parse-failure` naming the files when every entry is a
+  warn-level `PartialParsing` (for example TypeScript 5.0 `export type * from`,
+  which Semgrep 1.185.0 cannot parse), otherwise `engine-error`. Partly parsed
+  files are never clean; findings from the rest are kept. Unparseable output is `failed`/`invalid-output`.
 - Results cover the configured rules only. They are not Sonar-equivalent and are
   not a complete security review. The starter rules are unproven against real
   code and need tuning against the real engine before relying on them.

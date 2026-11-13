@@ -374,3 +374,26 @@ await test('eslint parse failures are listed by name and cap the list', () => {
     base,
   );
 });
+
+await test('semgrep partial parses are named with their own wording and failed runs are untouched', () => {
+  const base: EngineResult = {
+    engine: 'semgrep',
+    status: 'incomplete',
+    reason: 'parse-failure',
+    findings: [],
+  };
+  const named = withParseFailures(
+    base,
+    { parseFailures: ['src/a.ts'], truncated: false },
+    'Semgrep could only partly parse, so they were not fully scanned',
+  );
+  assert.equal(
+    named.reason,
+    'parse-failure: 1 file(s) Semgrep could only partly parse, so they were not fully scanned: src/a.ts',
+  );
+  const failed: EngineResult = { ...base, status: 'failed' };
+  assert.equal(
+    withParseFailures(failed, { parseFailures: ['x.ts'], truncated: false }),
+    failed,
+  );
+});

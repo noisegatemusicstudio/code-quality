@@ -80,6 +80,8 @@ export interface ScannerAdapter {
   runtime?: { executable: string; args: readonly string[] };
   /** Engine needs base tools (for example `uname`): run with a fixed system PATH. */
   systemPath?: boolean;
+  /** Engine needs a `HOME` to start: give it the scan's private workspace, never the real home. */
+  privateHome?: boolean;
   /** Run before the scan; its trimmed stdout must equal `versionOutput`. */
   versionArgs: readonly string[];
   versionOutput: string;
@@ -293,6 +295,8 @@ export async function runAdapter(
       outputLimit: 4096,
       signal: request.signal,
       systemPath: adapter.systemPath,
+      // No `home` here: the version probe needs none, and some engines print
+      // extra lines about loaded plugins once they can find a home.
     });
     if (version.state === 'cancelled') return build('incomplete', 'cancelled');
     if (
@@ -308,6 +312,7 @@ export async function runAdapter(
       outputLimit: adapterLimits.stdoutBytes,
       signal: request.signal,
       systemPath: adapter.systemPath,
+      home: adapter.privateHome ? workspace : undefined,
     });
     switch (run.state) {
       case 'cancelled':

@@ -323,7 +323,7 @@ await test('ESLint import rejects oversize input, bad scope and relative roots',
 // ---- Adapter runner ---------------------------------------------------------
 const fakeSource = `#!${process.execPath}
 const [, , ...args] = process.argv;
-if (args[0] === '--version') { console.log('fake-engine 1.0.0'); process.exit(0); }
+if (args[0] === '--version') { console.log('fake-engine 1.0.0' + (process.env.HOME ? ' + ruleset (home)' : '')); process.exit(0); }
 const fs = require('node:fs');
 const mode = (args.find((a) => a.startsWith('--mode=')) ?? '').slice(7);
 if (mode === 'ok') {
@@ -429,6 +429,28 @@ await test(
       delete process.env.AWS_SECRET_ACCESS_KEY;
       delete process.env.HTTPS_PROXY;
     }
+  },
+);
+
+await test(
+  'privateHome gives the scan a HOME but not the version probe, and only when opted in',
+  { skip: !linux },
+  async () => {
+    // The fake engine, like tflint, prints extra version lines once it has a
+    // HOME, so a HOME leaking into the probe fails with engine-version-mismatch.
+    const optedIn = await runAdapter(
+      { ...adapter, privateHome: true },
+      { scope, files, args: ['--mode=env'] },
+    );
+    assert.equal(optedIn.status, 'completed', String(optedIn.reason));
+    const names = (optedIn.findings[0]?.message ?? '').split(',');
+    assert.ok(names.includes('HOME'), names.join(','));
+    const plain = await run('env');
+    assert.equal(plain.status, 'completed');
+    assert.equal(
+      (plain.findings[0]?.message ?? '').split(',').includes('HOME'),
+      false,
+    );
   },
 );
 

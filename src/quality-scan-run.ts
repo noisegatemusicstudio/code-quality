@@ -419,6 +419,7 @@ export async function lintVersionOutput(
 export function withParseFailures(
   result: EngineResult,
   report: { parseFailures: readonly string[]; truncated: boolean },
+  cannot = 'the bundled parser cannot parse and were not linted',
 ): EngineResult {
   if (report.parseFailures.length === 0 || result.status === 'failed')
     return result;
@@ -427,7 +428,7 @@ export function withParseFailures(
     report.parseFailures.length > 20 || report.truncated ? ', and more' : '';
   return {
     ...result,
-    reason: `parse-failure: ${String(report.parseFailures.length)} file(s) the bundled parser cannot parse and were not linted: ${shown}${more}`,
+    reason: `parse-failure: ${String(report.parseFailures.length)} file(s) ${cannot}: ${shown}${more}`,
   };
 }
 
@@ -926,7 +927,13 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     );
     const base = fromEnvelope('semgrep', result.envelope, semgrepVersion);
     return applyOmitted(
-      result.refusal ? { ...base, reason: result.refusal } : base,
+      result.refusal
+        ? { ...base, reason: result.refusal }
+        : withParseFailures(
+            base,
+            { parseFailures: result.parseFailures, truncated: false },
+            'Semgrep could only partly parse, so they were not fully scanned',
+          ),
       omitted,
       causes,
     );

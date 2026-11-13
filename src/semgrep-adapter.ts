@@ -86,10 +86,14 @@ export interface SemgrepFindingDetail {
 export interface SemgrepParsedOutput extends ParsedOutput {
   /** Keyed by finding fingerprint. */
   details: Record<string, SemgrepFindingDetail>;
+  /** Sorted, de-duplicated files Semgrep only partly parsed. */
+  parseFailures: string[];
 }
 export interface SemgrepScanResult {
   envelope: AdapterEnvelope;
   details: Record<string, SemgrepFindingDetail>;
+  /** Files Semgrep could not fully parse; set with reason `parse-failure`. */
+  parseFailures: string[];
   /** Set when the scan was refused before the engine ran. */
   refusal?: SemgrepRefusal;
   /** Files in the request that were not scanned because of their language. */
@@ -201,11 +205,28 @@ function nativeRuleId(checkId: string): string {
 }
 
 /**
+ * A Semgrep `errors` entry that only says part of one file could not be parsed
+ * (`PartialParsing`, level `warn`). Returns that file, or undefined for any
+ * other kind of error, which stays a genuine `engine-error`.
+ */
+function partialParsingPath(entry: unknown): string | undefined {
+  if (!isRecord(entry) || entry.level !== 'warn') return undefined;
+  const type = entry.type;
+  if (!Array.isArray(type) || type[0] !== 'PartialParsing') return undefined;
+  const raw = entry.path;
+  if (typeof raw !== 'string') return undefined;
+  const rel = raw.startsWith('./') ? raw.slice(2) : raw;
+  return isSafeRelativePath(rel) ? rel : undefined;
+}
+
+/**
  * Convert `semgrep --json` output. Reads rule id, path, range, severity and
  * the metadata fields CWE, confidence, finding-type and remediation, plus
  * dataflow *locations*. Matched source (`extra.lines`), `extra.fix` and trace
  * contents are never copied. A non-empty `errors` array marks the run
- * `incomplete`; malformed JSON or a missing `results` array is unusable.
+ * `incomplete`: `parse-failure` (with the file list) when every entry is a
+ * warn-level `PartialParsing` for a safe path, otherwise `engine-error`. Partly
+ * parsed files are never treated as clean. Malformed JSON or a missing `results` array is unusable.
  */
 export function parseSemgrepReport(stdout: string): SemgrepParsedOutput {
   const root: unknown = JSON.parse(stdout);
@@ -214,8 +235,19 @@ export function parseSemgrepReport(stdout: string): SemgrepParsedOutput {
   let partial: EnvelopeReason | undefined;
   if (root.errors !== undefined && !Array.isArray(root.errors))
     throw new TypeError('not a semgrep report');
-  if (Array.isArray(root.errors) && root.errors.length > 0)
-    partial = 'engine-error';
+  const parseFailures = new Set<string>();
+  if (Array.isArray(root.errors) && root.errors.length > 0) {
+    for (const entry of root.errors as unknown[]) {
+      const file = partialParsingPath(entry);
+      if (file === undefined) {
+        parseFailures.clear();
+        partial = 'engine-error';
+        break;
+      }
+      parseFailures.add(file);
+    }
+    partial ??= 'parse-failure';
+  }
   type Candidate = Omit<AdapterFinding, 'fingerprint'> & {
     detail: SemgrepFindingDetail;
   };
@@ -285,9 +317,12 @@ export function parseSemgrepReport(stdout: string): SemgrepParsedOutput {
       return f;
     },
   );
+  const failures = [...parseFailures]
+    .sort((a, b) => a.localeCompare(b, 'en'))
+    .slice(0, 1000);
   return assembled.partial
-    ? { findings, partial: assembled.partial, details }
-    : { findings, details };
+    ? { findings, partial: assembled.partial, details, parseFailures: failures }
+    : { findings, details, parseFailures: failures };
 }
 
 /** Policy gate evaluated before anything is written or executed. */
@@ -410,6 +445,7 @@ export async function runSemgrepScan(
     return {
       envelope: checked.envelope,
       details: {},
+      parseFailures: [],
       refusal,
       unsupportedFiles,
       notice: semgrepCoverageNotice,
@@ -419,12 +455,14 @@ export async function runSemgrepScan(
   if (refused) return skipped(refused.refusal);
   if (supported.length === 0) return skipped('unsupported-language');
   let details: Record<string, SemgrepFindingDetail> = {};
+  let parseFailures: string[] = [];
   const base = createSemgrepAdapter(options);
   const adapter: ScannerAdapter = {
     ...base,
     parse: (stdout, context) => {
       const parsed = base.parse(stdout, context) as SemgrepParsedOutput;
       details = parsed.details;
+      parseFailures = parsed.parseFailures;
       return parsed;
     },
   };
@@ -441,6 +479,7 @@ export async function runSemgrepScan(
     details: Object.fromEntries(
       Object.entries(details).filter(([fp]) => kept.has(fp)),
     ),
+    parseFailures: envelope.reason === 'parse-failure' ? parseFailures : [],
     unsupportedFiles,
     notice: semgrepCoverageNotice,
   };

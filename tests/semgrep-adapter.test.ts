@@ -100,6 +100,13 @@ const expectedArgs = [
   rulesPath,
   '.',
 ];
+const partialWarn = (path: string) => ({
+  code: 3,
+  level: 'warn',
+  type: ['PartialParsing', [{ path }]],
+  path,
+  message: 'Syntax error',
+});
 const dir = await mkdtemp(join(tmpdir(), 'semgrep-test-'));
 const marker = join(dir, 'ran');
 const fakeSource = `#!${process.execPath}
@@ -111,6 +118,7 @@ if (args[0] === '--version') { console.log(mode === 'old' ? '1.0.0' : '${semgrep
 if (JSON.stringify(args) !== ${JSON.stringify(JSON.stringify(expectedArgs))}) { console.error('unexpected args'); process.exit(3); }
 if (mode === 'vulnerable') { console.log(${JSON.stringify(json(vulnerable))}); process.exit(0); }
 if (mode === 'partial') { console.log(${JSON.stringify(json({ ...vulnerable, errors: [{ type: 'PartialParsing', path: 'src/c.ts' }] }))}); process.exit(0); }
+if (mode === 'parse') { console.log(${JSON.stringify(json({ ...vulnerable, errors: [partialWarn('src/c.ts'), partialWarn('src/a.ts'), partialWarn('src/c.ts')] }))}); process.exit(0); }
 if (mode === 'crash') { process.exit(2); }
 if (mode === 'garbage') { console.log('not json'); process.exit(0); }
 console.log(${JSON.stringify(json(safe))});
@@ -207,6 +215,7 @@ await test('safe report yields no findings; unusable or partial reports are flag
   assert.deepEqual(parseSemgrepReport(json(safe)), {
     findings: [],
     details: {},
+    parseFailures: [],
   });
   assert.throws(() => parseSemgrepReport('not json'));
   assert.throws(() => parseSemgrepReport('{"results": 3}'));
@@ -350,6 +359,55 @@ await test(
     const clean = await run('safe');
     assert.equal(clean.envelope.status, 'completed');
     assert.deepEqual(clean.envelope.findings, []);
+  },
+);
+
+await test('warn-level PartialParsing reports parse-failure with the sorted file list, never clean', () => {
+  const only = parseSemgrepReport(
+    json({
+      ...safe,
+      errors: [
+        partialWarn('./src/b.ts'),
+        partialWarn('src/a.ts'),
+        partialWarn('src/b.ts'),
+      ],
+    }),
+  );
+  assert.equal(only.partial, 'parse-failure');
+  assert.deepEqual(only.parseFailures, ['src/a.ts', 'src/b.ts']);
+  // Any other error, even beside PartialParsing, stays a genuine engine-error.
+  for (const other of [
+    { code: 2, level: 'error', type: 'SemgrepError', message: 'boom' },
+    {
+      ...partialWarn('src/x.ts'),
+      type: ['LexicalError', [{ path: 'src/x.ts' }]],
+    },
+    { ...partialWarn('src/x.ts'), level: 'error' },
+    { ...partialWarn('src/x.ts'), level: undefined },
+    partialWarn('../escape.ts'),
+    { type: 'PartialParsing', path: 'src/x.ts' },
+  ]) {
+    const mixed = parseSemgrepReport(
+      json({ ...safe, errors: [partialWarn('src/a.ts'), other] }),
+    );
+    assert.equal(mixed.partial, 'engine-error');
+    assert.deepEqual(mixed.parseFailures, []);
+  }
+  assert.deepEqual(parseSemgrepReport(json(safe)).parseFailures, []);
+});
+
+await test(
+  'PartialParsing warnings make the run incomplete/parse-failure, keeping findings',
+  linuxOnly,
+  async () => {
+    const result = await run('parse');
+    assert.equal(result.envelope.status, 'incomplete');
+    assert.equal(result.envelope.reason, 'parse-failure');
+    assert.equal(result.envelope.findings.length, 2);
+    assert.deepEqual(result.parseFailures, ['src/a.ts', 'src/c.ts']);
+    const other = await run('partial');
+    assert.equal(other.envelope.reason, 'engine-error');
+    assert.deepEqual(other.parseFailures, []);
   },
 );
 

@@ -97,6 +97,25 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npm run build
+      # gitleaks and jscpd read committed snapshots, which refuse Git older than
+      # 2.47 (README Requirements). Runner images can ship older Git, so build a
+      # pinned release from its sha256-verified source tarball and point the scan at it.
+      - name: Provision pinned Git (sha256-verified)
+        env:
+          GIT_VERSION: '2.56.1'
+          GIT_SHA256: f0b0bf89264b9bd2e1c640363e7529643989da76281600473c50745cd34a607f
+        run: |
+          set -euo pipefail
+          prefix="$RUNNER_TEMP/git"
+          curl --proto '=https' --tlsv1.2 -fsSL --retry 3 -o "$RUNNER_TEMP/git.tar.xz" \
+            "https://www.kernel.org/pub/software/scm/git/git-${GIT_VERSION}.tar.xz"
+          echo "${GIT_SHA256}  $RUNNER_TEMP/git.tar.xz" | sha256sum -c -
+          mkdir "$RUNNER_TEMP/git-src"
+          tar -xJf "$RUNNER_TEMP/git.tar.xz" -C "$RUNNER_TEMP/git-src" --strip-components=1
+          make -C "$RUNNER_TEMP/git-src" -j"$(nproc)" prefix="$prefix" \
+            NO_CURL=1 NO_EXPAT=1 NO_GETTEXT=1 NO_TCLTK=1 NO_PERL=1 NO_PYTHON=1 NO_OPENSSL=1 install
+          "$prefix/bin/git" --version
+          echo "CODE_QUALITY_GIT_EXECUTABLE=$prefix/bin/git" >> "$GITHUB_ENV"
       # detekt and ktlint are JVM jars. ubuntu-latest ships Temurin (JAVA_HOME);
       # the scan finds it itself and reports the Kotlin engines `skipped` with a
       # reason when no runtime exists, so no third-party action is needed.

@@ -271,6 +271,28 @@ await test('reusable workflow: workflow_call, read-only permissions, no secrets,
   assert.equal(/run:[^\n]*\$\{\{\s*inputs\./.test(text), false);
 });
 
+await test('reusable workflow provisions a sha256-verified Git >= 2.47 before the scans run', async () => {
+  const text = await readFile(
+    new URL('quality-scan.yml', workflowDirectory),
+    'utf8',
+  );
+  const provision = text.indexOf('name: Provision pinned Git');
+  const scans = text.indexOf('name: Run scans');
+  assert.ok(provision > 0 && provision < scans, 'Git is provisioned first');
+  const step = text.slice(provision, scans);
+  const version = /GIT_VERSION: '(\d+)\.(\d+)\.(\d+)'/.exec(step);
+  assert.ok(version, 'version is pinned');
+  const [major, minor] = [Number(version[1]), Number(version[2])];
+  assert.ok(major > 2 || (major === 2 && minor >= 47), 'Git >= 2.47');
+  assert.match(step, /GIT_SHA256: [0-9a-f]{64}\n/);
+  assert.match(step, /sha256sum -c -/);
+  assert.match(step, /https:\/\/www\.kernel\.org\/pub\/software\/scm\/git\//);
+  assert.match(
+    step,
+    /echo "CODE_QUALITY_GIT_EXECUTABLE=\$prefix\/bin\/git" >> "\$GITHUB_ENV"/,
+  );
+});
+
 await test('dogfood workflow calls the reusable one in advisory mode on every push and pull_request', async () => {
   const text = await readFile(
     new URL('quality.yml', workflowDirectory),

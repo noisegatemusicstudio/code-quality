@@ -15,6 +15,7 @@ import {
   buildLocalManifest,
   buildManifest,
   ManifestError,
+  manifestApplies,
   validateLocalIdentity,
   type LocalIdentityFlags,
 } from './quality-manifest.js';
@@ -380,8 +381,15 @@ async function run(args: string[]): Promise<number> {
     await appendFile(process.env.GITHUB_STEP_SUMMARY, summary + '\n');
   process.stdout.write(summary + '\n');
   // The portal contract: required on GitHub Actions, where the identity comes
-  // from, and in local mode, where it comes from validated flags.
-  if (local.flags || process.env.GITHUB_ACTIONS === 'true') {
+  // from, and in local mode, where it comes from validated flags. A manual
+  // workflow_dispatch run has no identity the portal can trust: it writes no
+  // manifest and its result is the gate decision alone.
+  const actions = !local.flags && process.env.GITHUB_ACTIONS === 'true';
+  if (actions && !manifestApplies(process.env))
+    process.stderr.write(
+      'manifest skipped: manual workflow_dispatch run; the portal does not ingest it\n',
+    );
+  else if (local.flags || actions) {
     try {
       const manifestInput = {
         commitSha,

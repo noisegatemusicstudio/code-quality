@@ -187,6 +187,17 @@ const localSource = (flags: LocalIdentityFlags): IdentitySource => ({
 export const validateLocalIdentity = (flags: LocalIdentityFlags): Identity =>
   validateIdentity(localSource(flags), '');
 
+/**
+ * Whether the portal manifest applies to this GitHub Actions run. A manual
+ * `workflow_dispatch` run carries no push or pull_request identity the portal
+ * can trust, so it writes no manifest and the job reports the gate result only.
+ * Every other event still goes through `buildManifest`, which stays strict and
+ * keeps rejecting anything but push and pull_request.
+ */
+export const manifestApplies = (
+  environment: Record<string, string | undefined>,
+): boolean => environment.GITHUB_EVENT_NAME !== 'workflow_dispatch';
+
 type ManifestInput = Parameters<typeof buildManifest>[1];
 
 /**

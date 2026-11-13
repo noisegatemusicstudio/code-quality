@@ -6,7 +6,11 @@ Scope: Builds the portal manifest from synthetic GITHUB_* environments and prove
 */
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { ManifestError, buildManifest } from '../src/quality-manifest.js';
+import {
+  ManifestError,
+  buildManifest,
+  manifestApplies,
+} from '../src/quality-manifest.js';
 import { findingFingerprint } from '../src/adapter-envelope.js';
 import type { AdapterEnvelope } from '../src/adapter-envelope.js';
 import { parseOsvMode, type EngineResult } from '../src/quality-scan.js';
@@ -220,4 +224,28 @@ await test('OSV envelope merge: worst status wins and findings concatenate', () 
   assert.equal(merged.status, 'incomplete');
   assert.equal(merged.findings.length, 1);
   assert.equal(mergeEnvelopes([ok, ok]).reason, undefined);
+});
+
+await test('manifestApplies exempts only a manual workflow_dispatch run; buildManifest still refuses it', () => {
+  assert.equal(
+    manifestApplies({
+      ...pushEnvironment,
+      GITHUB_EVENT_NAME: 'workflow_dispatch',
+    }),
+    false,
+  );
+  for (const event of ['push', 'pull_request', 'schedule', undefined])
+    assert.equal(
+      manifestApplies({ ...pushEnvironment, GITHUB_EVENT_NAME: event }),
+      true,
+      String(event),
+    );
+  assert.throws(
+    () =>
+      buildManifest(
+        { ...pushEnvironment, GITHUB_EVENT_NAME: 'workflow_dispatch' },
+        input,
+      ),
+    ManifestError,
+  );
 });

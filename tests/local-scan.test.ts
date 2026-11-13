@@ -258,3 +258,23 @@ await test('Actions path is unchanged: env identity, env workflowRef, and the lo
     /manifest invalid: GITHUB_RUN_ID is missing or malformed/,
   );
 });
+
+await test('a manual workflow_dispatch run on Actions writes no manifest and reports the gate result, while other events stay strict', () => {
+  const manual = scan([], {
+    ...actionsEnv,
+    GITHUB_EVENT_NAME: 'workflow_dispatch',
+  });
+  assert.equal(manual.status, 0, manual.stderr);
+  assert.equal(existsSync(join(manual.out, 'manifest.json')), false);
+  assert.match(manual.stderr, /manifest skipped: manual workflow_dispatch run/);
+  // The evidence is still produced; only the portal manifest is skipped.
+  assert.equal(existsSync(join(manual.out, 'report.json')), true);
+  assert.equal(existsSync(join(manual.out, 'summary.md')), true);
+  // Only workflow_dispatch is exempt: every other unsupported event still fails.
+  for (const event of ['schedule', 'release']) {
+    const r = scan([], { ...actionsEnv, GITHUB_EVENT_NAME: event });
+    assert.equal(r.status, 2, event);
+    assert.match(r.stderr, /GITHUB_EVENT_NAME must be push or pull_request/);
+    assert.equal(existsSync(join(r.out, 'manifest.json')), false, event);
+  }
+});

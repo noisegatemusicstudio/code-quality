@@ -610,7 +610,11 @@ envelopes/<engine>.json   validated adapter envelope, only for engines that prod
 
 `manifest.json` is built by the CLI from `GITHUB_*` variables with strict
 validation; a missing or malformed value fails the run instead of being
-guessed. Fields (`schemaVersion` 1):
+guessed. A manual `workflow_dispatch` run has no push or pull_request identity
+the portal can trust, so it writes no `manifest.json`: the report, summary and
+envelopes are still uploaded, the log says `manifest skipped`, and the job
+passes or fails on the gate decision alone. The portal does not ingest such a
+run. Every other unsupported event still fails the run. Fields (`schemaVersion` 1):
 
 | Field                 | Type                     | Source                                                                |
 | --------------------- | ------------------------ | --------------------------------------------------------------------- |

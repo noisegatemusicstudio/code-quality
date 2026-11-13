@@ -286,6 +286,9 @@ export function tflintAdapter(c: Common): ScannerAdapter {
     executableSha256: tflintPin.sha256,
     fixedArgs: ['--recursive', '--format', 'json'],
     allowedArgs: [],
+    // tflint needs a HOME (without one it runs `getent`, which the scrubbed
+    // PATH hides, and exits 1 with "Failed to load TFLint config").
+    privateHome: true,
     // 0: clean, 2: issues found. 1 is an engine error.
     successExitCodes: [0, 2],
     parse: (stdout) => parseTflint(stdout, c.files),

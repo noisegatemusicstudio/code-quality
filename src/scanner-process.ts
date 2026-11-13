@@ -11,6 +11,12 @@ export interface ProcessRequest {
   signal?: AbortSignal;
   /** Opt in to a fixed system PATH (`/usr/bin:/bin`) for engines that spawn base tools. */
   systemPath?: boolean;
+  /**
+   * Opt in to a `HOME` for engines that refuse to start without one (tflint
+   * otherwise runs `getent` to find it and fails). Must be a private directory
+   * the scan owns, never the real user's home, so no user config is read.
+   */
+  home?: string;
 }
 export type ProcessOutcome =
   | { state: 'exited'; code: number; stdout: Buffer }
@@ -59,6 +65,8 @@ export async function runScannerProcess(
   if (
     !isAbsolute(request.executable) ||
     !isAbsolute(request.cwd) ||
+    (request.home !== undefined &&
+      (!isAbsolute(request.home) || request.home.includes('\0'))) ||
     !Number.isSafeInteger(request.timeoutMs) ||
     request.timeoutMs < 1 ||
     request.timeoutMs > 120000 ||
@@ -86,6 +94,7 @@ export async function runScannerProcess(
         stdio: ['ignore', 'pipe', 'pipe', 'ipc'],
         env: {
           ...(request.systemPath ? { PATH: '/usr/bin:/bin' } : {}),
+          ...(request.home === undefined ? {} : { HOME: request.home }),
           LANG: 'C',
           LC_ALL: 'C',
           TZ: 'UTC',

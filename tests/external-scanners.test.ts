@@ -15,6 +15,7 @@ import {
   findJscpdSuppression,
   parseExternalReport,
   readBoundedRegular,
+  reportReachedSizeCap,
   runExternalScanner,
   suppressionScanBounds,
 } from '../src/external-scanners.js';
@@ -238,4 +239,18 @@ await test('scanner process failures map to specific reasons instead of a generi
     executionFailureReason({ state: 'exited', code: 42 }),
     'execution-or-report-failed',
   );
+});
+
+await test('a report truncated at the size cap is recognised, a small or missing one is not', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'report-cap-'));
+  try {
+    const path = join(directory, 'report.json');
+    assert.equal(await reportReachedSizeCap(path, 10), false);
+    await writeFile(path, Buffer.alloc(9));
+    assert.equal(await reportReachedSizeCap(path, 10), false);
+    await writeFile(path, Buffer.alloc(10));
+    assert.equal(await reportReachedSizeCap(path, 10), true);
+  } finally {
+    await rm(directory, { recursive: true, force: true });
+  }
 });

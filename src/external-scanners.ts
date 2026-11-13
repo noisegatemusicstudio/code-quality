@@ -279,7 +279,7 @@ async function runExternalScannerInner(
       executable: '/usr/bin/prlimit',
       args: [
         '--as=8589934592:8589934592',
-        '--fsize=1048576:1048576',
+        `--fsize=${String(reportBytesCap)}:${String(reportBytesCap)}`,
         '--cpu=30:30',
         '--',
         tool,
@@ -293,6 +293,13 @@ async function runExternalScannerInner(
     if (execution.state === 'cleanup-uncertain') uncertain = true;
     result.state = execution.state === 'timed-out' ? 'timed-out' : 'failed';
     result.reason = executionFailureReason(execution);
+    // `prlimit --fsize` kills the tool (SIGXFSZ) once its report reaches the cap,
+    // which looks like a plain tool failure; the truncated file names the cause.
+    if (
+      execution.state === 'failed' &&
+      (await reportReachedSizeCap(report, reportBytesCap))
+    )
+      result.reason = 'report-too-large';
     if (
       execution.state !== 'exited' ||
       (execution.code !== 0 && execution.code !== 42)
@@ -300,7 +307,7 @@ async function runExternalScannerInner(
       return result;
     let reportBytes: Buffer;
     try {
-      reportBytes = await readBoundedRegular(report, 1048576);
+      reportBytes = await readBoundedRegular(report, reportBytesCap);
     } catch (error) {
       return {
         ...result,
@@ -381,6 +388,21 @@ export async function findJscpdSuppression(
     return (await walk(sourceDirectory)) ? 'found' : 'none';
   } catch {
     return 'limit';
+  }
+}
+
+/** Largest report a scanner may write and this module will read. */
+export const reportBytesCap = 1048576;
+
+/** True when the report exists and is at or above the cap (a truncated write). */
+export async function reportReachedSizeCap(
+  report: string,
+  cap: number,
+): Promise<boolean> {
+  try {
+    return (await lstat(report)).size >= cap;
+  } catch {
+    return false;
   }
 }
 

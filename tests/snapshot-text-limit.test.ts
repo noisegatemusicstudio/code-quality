@@ -73,9 +73,12 @@ const text = (bytes: number): string => `{"a":"${'x'.repeat(bytes - 9)}"}\n`;
 await test('snapshot bounds: text limit is 4 MiB, the engine bound stays 1 MiB, the pre-scan is never stricter than the snapshot', () => {
   assert.equal(snapshotBounds.sourceFileBytes, 4 * 1024 * 1024);
   assert.equal(snapshotBounds.engineFileBytes, 1024 * 1024);
-  assert.ok(suppressionScanBounds.fileBytes >= snapshotBounds.sourceFileBytes);
-  assert.ok(suppressionScanBounds.totalBytes >= snapshotBounds.sourceBytes);
-  assert.ok(suppressionScanBounds.files >= snapshotBounds.sourceFiles);
+  // Widened so the comparison is checked at run time, not folded by the type.
+  const prescan: Record<string, number> = { ...suppressionScanBounds };
+  const snapshot: Record<string, number> = { ...snapshotBounds };
+  assert.ok(prescan.fileBytes >= snapshot.sourceFileBytes);
+  assert.ok(prescan.totalBytes >= snapshot.sourceBytes);
+  assert.ok(prescan.files >= snapshot.sourceFiles);
 });
 
 await test('a text blob between 1 MiB and 4 MiB is materialised and scanned, one byte over 4 MiB still fails closed as oversized-blob', async () => {

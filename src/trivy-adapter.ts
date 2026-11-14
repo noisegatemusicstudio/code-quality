@@ -148,7 +148,7 @@ export function isIacCandidate(path: string): boolean {
  * this only ever excludes and never hides a file trivy could have read.
  */
 export function isIacContent(path: string, text: string): boolean {
-  if (!/\.json$/.test(path) || /\.tf\.json$/.test(path)) return true;
+  if (!path.endsWith('.json') || path.endsWith('.tf.json')) return true;
   let root: unknown;
   try {
     root = JSON.parse(text);

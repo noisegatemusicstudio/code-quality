@@ -23,6 +23,7 @@ import { OSV_SCHEMA_METADATA } from './osv-database.js';
 import {
   createCommittedSnapshot,
   omittedTotal,
+  type SkippedBinary,
   snapshotBounds,
   type SnapshotOmissions,
   SnapshotError,
@@ -78,6 +79,8 @@ export interface ExecutionReport {
     byteCount: number;
     /** Tree entries never materialised (symlinks, submodules, oversized, non-ASCII). */
     omitted: SnapshotOmissions;
+    /** Binary blobs (by content) skipped and not text-scanned; counted, never hidden. */
+    skippedBinary: SkippedBinary;
     checkoutIncluded: false;
     dependencyInputs: 'none' | 'declaration-bundle';
     declarationBundle?: {
@@ -189,6 +192,7 @@ export async function scanCommittedSource(options: {
     fileCount: snapshot.fileCount,
     byteCount: snapshot.byteCount,
     omitted: snapshot.omitted,
+    skippedBinary: snapshot.skippedBinary,
     checkoutIncluded: false,
     dependencyInputs: 'none',
   };

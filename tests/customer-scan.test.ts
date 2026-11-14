@@ -19,6 +19,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   createCommittedSnapshot,
+  omittedTotal,
   SnapshotError,
   snapshotBounds,
 } from '../src/committed-snapshot.js';
@@ -253,6 +254,7 @@ await test('symlink, submodule, non-ASCII and oversized entries are counted as o
         submodule: 1,
         'oversized-blob': 1,
         'unsupported-path': 1,
+        'binary-limit': 0,
       });
       assert.equal(snapshot.fileCount, 3);
       await assert.rejects(access(join(snapshot.directory, 'link')));
@@ -302,6 +304,7 @@ await test('trees beyond the old 1000-entry bound snapshot, with a named hard ca
         submodule: 0,
         'oversized-blob': 0,
         'unsupported-path': 0,
+        'binary-limit': 0,
       });
     } finally {
       await snapshot.dispose();
@@ -538,6 +541,204 @@ await test('TypeScript source suppressions stay limited while ESLint inline disa
     assert.equal(report.scanners[1].state, 'limited');
     assert.equal(report.scanners[1].reason, 'source-suppression-directive');
     assert.equal(report.scanners[1].sourceSuppressionCount, 1);
+  } finally {
+    await f.dispose();
+  }
+});
+
+const commitAll = (f: Awaited<ReturnType<typeof fixture>>, message: string) => {
+  f.git('add', '.');
+  f.git(
+    '-c',
+    'user.name=Fixture',
+    '-c',
+    'user.email=fixture@example.invalid',
+    'commit',
+    '-qm',
+    message,
+    '--no-verify',
+  );
+  return f.git('rev-parse', 'HEAD');
+};
+const pngLike = (size: number, tag = 0): Buffer => {
+  const bytes = Buffer.alloc(size, tag);
+  Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]).copy(bytes);
+  return bytes;
+};
+
+await test('binary blobs over the text limit are skipped, counted and manifest-bound, not omitted', async () => {
+  const f = await fixture();
+  try {
+    await writeFile(join(f.root, 'shot.png'), pngLike(1048577));
+    await writeFile(join(f.root, 'small.png'), pngLike(2048));
+    const sha = commitAll(f, 'binary');
+    const snapshot = await createCommittedSnapshot({
+      ...f.options,
+      commitSha: sha,
+    });
+    try {
+      assert.equal(omittedTotal(snapshot.omitted), 0);
+      assert.deepEqual(snapshot.skippedBinary, {
+        count: 2,
+        bytes: 1048577 + 2048,
+      });
+      // Not materialised and not counted toward the source budget.
+      await assert.rejects(access(join(snapshot.directory, 'shot.png')));
+      await assert.rejects(access(join(snapshot.directory, 'small.png')));
+      assert.equal(
+        snapshot.byteCount,
+        (await readFile(join(f.root, 'source.ts'))).length +
+          (await readFile(join(f.root, 'eslint.config.mjs'))).length +
+          (await readFile(join(f.root, 'tsconfig.json'))).length,
+      );
+      const first = snapshot.manifestSha256;
+      // The skipped content is bound into the manifest: changing it changes the hash.
+      await writeFile(join(f.root, 'shot.png'), pngLike(1048577, 1));
+      const changed = await createCommittedSnapshot({
+        ...f.options,
+        commitSha: commitAll(f, 'changed'),
+      });
+      try {
+        assert.notEqual(changed.manifestSha256, first);
+      } finally {
+        await changed.dispose();
+      }
+    } finally {
+      await snapshot.dispose();
+    }
+    const report = await scanCommittedSource({ ...f.options, commitSha: sha });
+    assert.deepEqual(report.source?.skippedBinary, {
+      count: 2,
+      bytes: 1048577 + 2048,
+    });
+    assert.equal(report.source.omitted['oversized-blob'], 0);
+    // No omission means the snapshot no longer downgrades completed engines.
+    assert.ok(
+      report.scanners.every(
+        (slot) => slot.reason !== 'snapshot-entries-omitted',
+      ),
+    );
+  } finally {
+    await f.dispose();
+  }
+});
+
+await test('binary classification is by content: a text .png is scanned, an oversized text file is still omitted', async () => {
+  const f = await fixture();
+  try {
+    await writeFile(join(f.root, 'notes.png'), 'plain text, not an image\n');
+    await writeFile(
+      join(f.root, 'prefixed.pdf'),
+      '%PDF-1.4 is only a prefix here\nAKIAIOSFODNN7EXAMPLE\n',
+    );
+    await writeFile(
+      join(f.root, 'big.json'),
+      '{"a":"' + 'x'.repeat(1048577) + '"}',
+    );
+    await writeFile(join(f.root, 'data.json'), pngLike(512));
+    const sha = commitAll(f, 'mixed');
+    const snapshot = await createCommittedSnapshot({
+      ...f.options,
+      commitSha: sha,
+    });
+    try {
+      assert.equal(
+        await readFile(join(snapshot.directory, 'notes.png'), 'utf8'),
+        'plain text, not an image\n',
+      );
+      assert.match(
+        await readFile(join(snapshot.directory, 'prefixed.pdf'), 'utf8'),
+        /AKIA/,
+      );
+      await assert.rejects(access(join(snapshot.directory, 'data.json')));
+      assert.equal(snapshot.omitted['oversized-blob'], 1);
+      assert.deepEqual(snapshot.skippedBinary, { count: 1, bytes: 512 });
+      assert.equal(omittedTotal(snapshot.omitted), 1);
+    } finally {
+      await snapshot.dispose();
+    }
+  } finally {
+    await f.dispose();
+  }
+});
+
+await test('binary caps fail closed: blobs over the per-file, count and total caps stay incomplete', async () => {
+  const f = await fixture();
+  try {
+    await writeFile(
+      join(f.root, 'huge.bin'),
+      pngLike(snapshotBounds.binaryBlobBytes + 1),
+    );
+    for (let index = 0; index <= snapshotBounds.binaryFiles; index++)
+      await writeFile(
+        join(f.root, `b${String(index)}.bin`),
+        Buffer.from([0, index & 255, index >> 8]),
+      );
+    const sha = commitAll(f, 'caps');
+    const snapshot = await createCommittedSnapshot({
+      ...f.options,
+      commitSha: sha,
+    });
+    try {
+      assert.equal(snapshot.omitted['oversized-blob'], 1);
+      assert.equal(snapshot.omitted['binary-limit'], 1);
+      assert.equal(snapshot.skippedBinary.count, snapshotBounds.binaryFiles);
+    } finally {
+      await snapshot.dispose();
+    }
+    const report = await scanCommittedSource({ ...f.options, commitSha: sha });
+    assert.ok(report.scanners.every((slot) => slot.state !== 'completed'));
+  } finally {
+    await f.dispose();
+  }
+});
+
+await test('the total binary byte cap fails closed', async () => {
+  const f = await fixture();
+  try {
+    const each = snapshotBounds.binaryBlobBytes;
+    const files = Math.floor(snapshotBounds.binaryTotalBytes / each) + 1;
+    for (let index = 0; index < files; index++)
+      await writeFile(
+        join(f.root, `v${String(index)}.bin`),
+        pngLike(each, index),
+      );
+    const sha = commitAll(f, 'total');
+    const snapshot = await createCommittedSnapshot({
+      ...f.options,
+      commitSha: sha,
+    });
+    try {
+      assert.equal(snapshot.omitted['binary-limit'], 1);
+      assert.equal(snapshot.skippedBinary.count, files - 1);
+    } finally {
+      await snapshot.dispose();
+    }
+  } finally {
+    await f.dispose();
+  }
+});
+
+await test('skipped binaries do not consume the source byte budget (many binaries beyond sourceBytes)', async () => {
+  const f = await fixture();
+  try {
+    // 70 x 1 MiB binaries exceed the 64 MiB sourceBytes bound if they were counted.
+    for (let index = 0; index < 70; index++)
+      await writeFile(
+        join(f.root, `i${String(index)}.png`),
+        pngLike(1048576, index),
+      );
+    const sha = commitAll(f, 'many images');
+    const snapshot = await createCommittedSnapshot({
+      ...f.options,
+      commitSha: sha,
+    });
+    try {
+      assert.equal(snapshot.skippedBinary.count, 70);
+      assert.equal(omittedTotal(snapshot.omitted), 0);
+    } finally {
+      await snapshot.dispose();
+    }
   } finally {
     await f.dispose();
   }

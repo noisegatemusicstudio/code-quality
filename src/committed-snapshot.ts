@@ -13,6 +13,7 @@ import { constants } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname, isAbsolute, resolve } from 'node:path';
 import { runScannerProcess } from './scanner-process.js';
+import { isBinaryContent } from './binary-content.js';
 
 export interface Snapshot {
   directory: string;
@@ -22,14 +23,33 @@ export interface Snapshot {
   byteCount: number;
   /** Tree entries that could not be materialised (never scanned, never clean). */
   omitted: SnapshotOmissions;
+  /**
+   * Binary blobs (by content) that were deliberately not materialised: counted,
+   * bound into the manifest hash and reported, but not text-scanned and not
+   * counted toward `sourceBytes`. Bounded by `binaryFiles`/`binaryTotalBytes`.
+   */
+  skippedBinary: SkippedBinary;
   gitVersion: string;
   dispose(): Promise<void>;
 }
+export interface SkippedBinary {
+  count: number;
+  bytes: number;
+}
 export type OmissionReason =
-  'symlink' | 'submodule' | 'oversized-blob' | 'unsupported-path';
+  | 'symlink'
+  | 'submodule'
+  | 'oversized-blob'
+  | 'unsupported-path'
+  /** A binary blob beyond the binary caps: the snapshot stays incomplete. */
+  | 'binary-limit';
 export type SnapshotOmissions = Record<OmissionReason, number>;
 export const omittedTotal = (o: SnapshotOmissions): number =>
-  o.symlink + o.submodule + o['oversized-blob'] + o['unsupported-path'];
+  o.symlink +
+  o.submodule +
+  o['oversized-blob'] +
+  o['unsupported-path'] +
+  o['binary-limit'];
 
 /**
  * Safety bounds of the committed-snapshot API. Each is a hard cap: exceeding
@@ -41,6 +61,12 @@ export const snapshotBounds = Object.freeze({
   sourceBytes: 67108864,
   sourceFiles: 10000,
   sourceFileBytes: 1048576,
+  /** Largest blob read only to classify it as binary (over `sourceFileBytes`). */
+  binaryBlobBytes: 16777216,
+  /** Total bytes of skipped binaries, and separately of over-limit blobs read to classify them. */
+  binaryTotalBytes: 268435456,
+  /** Most binary blobs that may be skipped. */
+  binaryFiles: 2000,
   treeListingBytes: 4194304,
   deadlineMs: 120000,
   gitCallMs: 60000,
@@ -71,8 +97,13 @@ export function isSupportedGitVersion(output: string): boolean {
 /** Scans the immutable committed tree ONLY, not the checkout (dirty or clean).
  * The caller explicitly trusts its Git executable and object database directory.
  * No status/diff/archive, checkout, filters, project config or working-tree reads.
- * Symlinks, submodules, oversized blobs and non-ASCII paths are not
+ * Symlinks, submodules, oversized text blobs and non-ASCII paths are not
  * materialised; they are counted in `omitted` so callers report incomplete.
+ * Blobs whose content is binary (NUL byte or known image/PDF/font signature in
+ * the first 8 KiB, never judged by file name) are not materialised either, but
+ * are bound into the manifest hash and counted in `skippedBinary` instead of
+ * `omitted`; they cannot hold scannable source text. Hard caps on their number
+ * and size turn the excess into `binary-limit` omissions (incomplete).
  * Unsafe paths and trees beyond `snapshotBounds` are rejected.
  */
 export async function createCommittedSnapshot(options: {
@@ -317,7 +348,10 @@ export async function createCommittedSnapshot(options: {
       submodule: 0,
       'oversized-blob': 0,
       'unsupported-path': 0,
+      'binary-limit': 0,
     };
+    const skippedBinary: SkippedBinary = { count: 0, bytes: 0 };
+    let probedBytes = 0;
     let byteCount = 0;
     for (const entry of entries) {
       const match =
@@ -361,18 +395,49 @@ export async function createCommittedSnapshot(options: {
         omit('unsupported-path');
         continue;
       }
-      if (Number(size) > snapshotBounds.sourceFileBytes) {
+      const blobSize = Number(size);
+      const overLimit = blobSize > snapshotBounds.sourceFileBytes;
+      if (overLimit) {
+        // Over the text limit: read it (bounded) only to learn whether it is
+        // binary. Too large to classify, or beyond the probe budget, stays an
+        // omission, so nothing larger than the caps is ever hidden as "binary".
+        if (blobSize > snapshotBounds.binaryBlobBytes) {
+          omit('oversized-blob');
+          continue;
+        }
+        if (probedBytes + blobSize > snapshotBounds.binaryTotalBytes) {
+          omit('binary-limit');
+          continue;
+        }
+        probedBytes += blobSize;
+      }
+      const bytes = await git(
+        ['cat-file', 'blob', oid],
+        overLimit
+          ? snapshotBounds.binaryBlobBytes
+          : snapshotBounds.sourceFileBytes,
+        'blob-read',
+      );
+      if (bytes.length !== blobSize) throw fail('blob-size-mismatch');
+      if (isBinaryContent(bytes)) {
+        if (
+          skippedBinary.count >= snapshotBounds.binaryFiles ||
+          skippedBinary.bytes + blobSize > snapshotBounds.binaryTotalBytes
+        ) {
+          omit('binary-limit');
+          continue;
+        }
+        skippedBinary.count += 1;
+        skippedBinary.bytes += blobSize;
+        manifest.update(`binary\0${mode}\0${path}\0${oid}\0`);
+        continue;
+      }
+      if (overLimit) {
         omit('oversized-blob');
         continue;
       }
-      byteCount += Number(size);
+      byteCount += blobSize;
       if (byteCount > snapshotBounds.sourceBytes) throw fail('source-bytes');
-      const bytes = await git(
-        ['cat-file', 'blob', oid],
-        snapshotBounds.sourceFileBytes,
-        'blob-read',
-      );
-      if (bytes.length !== Number(size)) throw fail('blob-size-mismatch');
       manifest.update(`${mode}\0${path}\0${oid}\0`);
       const blobPath = join(directory, path);
       await mkdir(dirname(blobPath), {
@@ -412,6 +477,7 @@ export async function createCommittedSnapshot(options: {
       fileCount: blobPaths.length,
       byteCount,
       omitted,
+      skippedBinary,
       gitVersion: version.trim().slice('git version '.length),
       dispose,
     };

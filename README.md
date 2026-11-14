@@ -134,6 +134,20 @@ Symlinks, submodules, non-ASCII paths and blobs over 1 MiB are not
 materialised: they are counted in `source.omitted` and no engine may then report
 `completed`. A failed snapshot names the guard in `sourceDetail` (for example
 `shallow-history`, `tree-entries`, `object-store-bytes`, `fsck-timeout`).
+
+jscpd bounds (draft, awaiting owner approval of each changed value):
+
+| Bound                                                                                            | Old   | New                                            | Why                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------ | ----- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Suppression pre-scan files (`suppressionScanBounds.files`)                                       | 1000  | 10000, taken from `snapshotBounds.sourceFiles` | A snapshot the scanner accepted (about 1134 files) failed `suppression-scan-limit`. The pre-scan now cannot be stricter than the snapshot.    |
+| jscpd report cap (`reportBytesCaps.jscpd`: write cap via `prlimit --fsize`, read cap, parse cap) | 1 MiB | 8 MiB, equal to `duplicationInputLimits.bytes` | jscpd's JSON report repeats each clone's source text (`fragment`), which the scanner does not use; a 2.8 MB report failed `report-too-large`. |
+
+Unchanged: pre-scan directories (2000), bytes per file (1 MiB) and total bytes
+(16 MiB); the gitleaks report cap (1 MiB); the clone (20000) and source-file
+(5000) limits of the duplication parser. Every bound still fails closed:
+`suppression-scan-limit` for the pre-scan, `report-too-large` for an oversized
+report. Not changed: jscpd's own compact EDN reporter was not adopted because
+its format could not be checked against the pinned 5.4.3 binary here.
 Shallow repositories, alternates and linked-worktree object stores are
 unsupported. Keep local request
 files, advisory archives and raw reports out of public commits.

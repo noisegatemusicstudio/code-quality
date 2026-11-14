@@ -14,10 +14,12 @@ import { tmpdir } from 'node:os';
 import type { AdapterFinding } from './adapter-envelope.js';
 import { parseGitleaksReport } from './gitleaks-adapter.js';
 import {
+  duplicationInputLimits,
   jscpdFindings,
   parseJscpdReport,
   snapshotLineCounter,
 } from './duplication.js';
+import { snapshotBounds } from './committed-snapshot.js';
 import { runScannerProcess } from './scanner-process.js';
 import { externalPins } from './scanner-pins.js';
 
@@ -101,7 +103,7 @@ export function parseExternalReport(
   coveredFileCount?: number;
   findings: AdapterFinding[];
 } | null {
-  if (raw.length > 1048576) return null;
+  if (raw.length > reportBytesCapFor(id)) return null;
   let text: string;
   try {
     text = new TextDecoder('utf-8', { fatal: true }).decode(raw);
@@ -229,6 +231,7 @@ async function runExternalScannerInner(
     );
     await writeFile(join(directory, 'ignore'), '');
     const report = join(directory, 'report.json');
+    const cap = reportBytesCapFor(id);
     const args =
       id === 'gitleaks'
         ? [
@@ -279,7 +282,7 @@ async function runExternalScannerInner(
       executable: '/usr/bin/prlimit',
       args: [
         '--as=8589934592:8589934592',
-        `--fsize=${String(reportBytesCap)}:${String(reportBytesCap)}`,
+        `--fsize=${String(cap)}:${String(cap)}`,
         '--cpu=30:30',
         '--',
         tool,
@@ -297,7 +300,7 @@ async function runExternalScannerInner(
     // which looks like a plain tool failure; the truncated file names the cause.
     if (
       execution.state === 'failed' &&
-      (await reportReachedSizeCap(report, reportBytesCap))
+      (await reportReachedSizeCap(report, cap))
     )
       result.reason = 'report-too-large';
     if (
@@ -307,7 +310,7 @@ async function runExternalScannerInner(
       return result;
     let reportBytes: Buffer;
     try {
-      reportBytes = await readBoundedRegular(report, reportBytesCap);
+      reportBytes = await readBoundedRegular(report, cap);
     } catch (error) {
       return {
         ...result,
@@ -347,7 +350,9 @@ async function runExternalScannerInner(
 
 /** Bounds of the pre-scan for in-source `jscpd:ignore` directives. */
 export const suppressionScanBounds = Object.freeze({
-  files: 1000,
+  // Aligned with the committed snapshot's own file bound, so a snapshot that
+  // was accepted can also be pre-scanned (was 1000: a 1134-file repo failed).
+  files: snapshotBounds.sourceFiles,
   directories: 2000,
   fileBytes: 1048576,
   totalBytes: 16777216,
@@ -391,8 +396,20 @@ export async function findJscpdSuppression(
   }
 }
 
-/** Largest report a scanner may write and this module will read. */
+/** Default largest report a scanner may write and this module will read. */
 export const reportBytesCap = 1048576;
+
+/**
+ * Per-engine report caps. jscpd's JSON report repeats every clone's source text
+ * (`fragment`), so it is several times larger than the findings it carries; its
+ * cap equals the duplication parser's own input limit (was 1 MiB).
+ */
+export const reportBytesCaps = Object.freeze({
+  gitleaks: reportBytesCap,
+  jscpd: duplicationInputLimits.bytes,
+});
+export const reportBytesCapFor = (id: ExternalId): number =>
+  reportBytesCaps[id];
 
 /** True when the report exists and is at or above the cap (a truncated write). */
 export async function reportReachedSizeCap(

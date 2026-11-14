@@ -611,7 +611,7 @@ await test('binary blobs over the text limit are skipped, counted and manifest-b
       count: 2,
       bytes: 1048577 + 2048,
     });
-    assert.equal(report.source?.omitted['oversized-blob'], 0);
+    assert.equal(report.source.omitted['oversized-blob'], 0);
     // No omission means the snapshot no longer downgrades completed engines.
     assert.ok(
       report.scanners.every(

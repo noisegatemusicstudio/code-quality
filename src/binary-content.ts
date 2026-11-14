@@ -10,7 +10,9 @@ export const binaryProbeBytes = 8192;
 
 const startsWith = (b: Uint8Array, text: string, at = 0): boolean =>
   b.length >= at + text.length &&
-  [...text].every((c, i) => b[at + i] === c.charCodeAt(0));
+  Array.from({ length: text.length }).every(
+    (_, i) => b[at + i] === text.charCodeAt(i),
+  );
 const startsWithBytes = (b: Uint8Array, bytes: number[]): boolean =>
   b.length >= bytes.length && bytes.every((v, i) => b[i] === v);
 
@@ -36,7 +38,16 @@ function isCleanText(head: Uint8Array): boolean {
     const text = new TextDecoder('utf-8', { fatal: true }).decode(head, {
       stream: true,
     });
-    return !/[\x00-\x08\x0b\x0e-\x1f\x7f]/.test(text);
+    for (let i = 0; i < text.length; i++) {
+      const c = text.charCodeAt(i);
+      // Tab, line feed, form feed and carriage return are ordinary text.
+      if (
+        (c < 0x20 && c !== 9 && c !== 10 && c !== 12 && c !== 13) ||
+        c === 0x7f
+      )
+        return false;
+    }
+    return true;
   } catch {
     return false;
   }

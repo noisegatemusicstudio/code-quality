@@ -130,9 +130,44 @@ execution report, and 2 for invalid input or I/O.
 The runtime and supplied Git installation must be trusted. This is not a
 hostile-code sandbox. Snapshot hard caps are a 512 MiB object store, 64 MiB of
 source, 10000 source files and 1 MiB per source file, within a 120 s deadline.
-Symlinks, submodules, non-ASCII paths and blobs over 1 MiB are not
+Symlinks, submodules, non-ASCII paths and text blobs over 1 MiB are not
 materialised: they are counted in `source.omitted` and no engine may then report
-`completed`. A failed snapshot names the guard in `sourceDetail` (for example
+`completed`.
+
+Binary blobs are the one exception. A blob is binary by **content**, never by
+file name: a NUL byte in its first 8 KiB, or a known image/PDF/font signature
+(PNG, JPEG, GIF, WebP, PDF, WOFF, WOFF2, OpenType) followed by bytes that are not
+clean UTF-8 text. A text file named `logo.png`, or one that merely starts with
+`%PDF-`, is text and is scanned; a `data.json` holding image bytes is binary.
+Binary blobs are not written to the snapshot, do not count toward the 64 MiB
+`sourceBytes` bound and do not make an engine incomplete, but they are never
+dropped silently: each is bound into the manifest hash (path and object id) and
+they are counted in `source.skippedBinary` (`count`, `bytes`) in the execution
+report, and in the `skippedBinary` field of the gitleaks and jscpd rows of
+`report.json` and as a note in the job summary. gitleaks and jscpd therefore
+do not look inside binary files. Hard caps keep a repository from hiding
+payloads this way: at most 2000 skipped binaries, 256 MiB of them in total, and
+no single binary over 16 MiB (`snapshotBounds.binaryFiles`, `binaryTotalBytes`,
+`binaryBlobBytes`). Binary blobs beyond a cap, and over-limit blobs the probe
+budget (also 256 MiB) cannot classify, are counted in `source.omitted`
+(`oversized-blob` or `binary-limit`) and the engines stay incomplete. A text
+blob over 1 MiB still counts as `oversized-blob`; there is deliberately no
+higher text limit (see "Large text blobs" below).
+
+Large text blobs: text files between 1 MiB and the cap (for example a generated
+`openapi.json`) remain `oversized-blob` omissions and keep gitleaks and jscpd
+`incomplete`. A separate higher gitleaks-only limit was not added: the snapshot
+directory is shared with jscpd, ESLint and the TypeScript profile, whose
+per-file behaviour is bounded at 1 MiB, and gitleaks memory and time on larger
+files has not been measured in a supported environment. Raising it needs an
+owner-approved constant and a measured gitleaks run; until then such files are
+reported, never treated as clean.
+
+The per-engine scans (`quality-scan-run`, used by trivy, prettier and the other
+text engines) read tracked files from the checkout by extension. They now also
+refuse binary content by bytes: a matched file whose content is binary is not
+passed to the engine and is counted as an omission with cause `binary`, so the
+engine reports incomplete rather than clean. A failed snapshot names the guard in `sourceDetail` (for example
 `shallow-history`, `tree-entries`, `object-store-bytes`, `fsck-timeout`).
 Shallow repositories, alternates and linked-worktree object stores are
 unsupported. Keep local request

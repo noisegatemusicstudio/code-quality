@@ -43,6 +43,8 @@ export interface ExternalResult {
     | 'report-invalid'
     | 'timeout'
     | 'cleanup-uncertain';
+  /** Fixed token naming the bound that produced `reason` (never content). */
+  detail?: string;
   findingCount?: number;
   /** Detailed envelope findings; only present when requested. */
   findings?: AdapterFinding[];
@@ -204,15 +206,20 @@ async function runExternalScannerInner(
     }
   }
   if (id === 'jscpd') {
-    const suppression = await findJscpdSuppression(sourceDirectory);
-    if (suppression === 'found')
+    const suppression = await scanJscpdSuppression(sourceDirectory);
+    if (suppression.state === 'found')
       return {
         ...result,
         state: 'limited',
         reason: 'source-suppression-directive',
       };
-    if (suppression !== 'none')
-      return { ...result, state: 'failed', reason: 'suppression-scan-limit' };
+    if (suppression.state === 'limit')
+      return {
+        ...result,
+        state: 'failed',
+        reason: 'suppression-scan-limit',
+        detail: suppression.limit,
+      };
   }
   const directory = await mkdtemp(join(tmpdir(), 'code-quality-external-'));
   let uncertain = false;
@@ -354,9 +361,18 @@ export const suppressionScanBounds = Object.freeze({
   // was accepted can also be pre-scanned (was 1000: a 1134-file repo failed).
   files: snapshotBounds.sourceFiles,
   directories: 2000,
-  fileBytes: 1048576,
-  totalBytes: 16777216,
+  // A snapshot file or total that was accepted must also be pre-scannable: the
+  // pre-scan is never stricter than the snapshot that feeds it (was 1 MiB per
+  // file and 16 MiB in total, so 49 MB of accepted text failed).
+  fileBytes: snapshotBounds.sourceFileBytes,
+  totalBytes: snapshotBounds.sourceBytes,
 });
+export type SuppressionLimit = keyof typeof suppressionScanBounds;
+class BoundHit extends Error {
+  constructor(public readonly limit: SuppressionLimit) {
+    super(limit);
+  }
+}
 
 /**
  * Look for a jscpd suppression directive in the snapshot before running the
@@ -364,36 +380,59 @@ export const suppressionScanBounds = Object.freeze({
  * type) so the absence of a directive could not be proven; the caller must not
  * run jscpd then, and reports it with a reason that names this guard.
  */
-export async function findJscpdSuppression(
+export async function scanJscpdSuppression(
   sourceDirectory: string,
   bounds: Record<
     keyof typeof suppressionScanBounds,
     number
   > = suppressionScanBounds,
-): Promise<'found' | 'none' | 'limit'> {
+): Promise<
+  | { state: 'found' }
+  | { state: 'none' }
+  | { state: 'limit'; limit: SuppressionLimit | 'unreadable' }
+> {
   let files = 0;
   let bytes = 0;
   let directories = 0;
   const walk = async (path: string): Promise<boolean> => {
-    if (++directories > bounds.directories) throw new Error();
+    if (++directories > bounds.directories) throw new BoundHit('directories');
     for (const entry of await readdir(path, { withFileTypes: true })) {
       const target = join(path, entry.name);
       if (entry.isDirectory()) {
         if (await walk(target)) return true;
       } else if (entry.isFile()) {
-        if (++files > bounds.files) throw new Error();
-        const data = await readBoundedRegular(target, bounds.fileBytes);
-        if ((bytes += data.length) > bounds.totalBytes) throw new Error();
+        if (++files > bounds.files) throw new BoundHit('files');
+        let data: Buffer;
+        try {
+          data = await readBoundedRegular(target, bounds.fileBytes);
+        } catch (error) {
+          throw error instanceof BoundedReadTooLargeError
+            ? new BoundHit('fileBytes')
+            : error;
+        }
+        if ((bytes += data.length) > bounds.totalBytes)
+          throw new BoundHit('totalBytes');
         if (/jscpd\s*:\s*ignore/i.test(data.toString('utf8'))) return true;
       } else throw new Error();
     }
     return false;
   };
   try {
-    return (await walk(sourceDirectory)) ? 'found' : 'none';
-  } catch {
-    return 'limit';
+    return { state: (await walk(sourceDirectory)) ? 'found' : 'none' };
+  } catch (error) {
+    return {
+      state: 'limit',
+      limit: error instanceof BoundHit ? error.limit : 'unreadable',
+    };
   }
+}
+
+/** Same scan, reduced to the plain state (`limit` loses the bound that was hit). */
+export async function findJscpdSuppression(
+  sourceDirectory: string,
+  bounds: Record<SuppressionLimit, number> = suppressionScanBounds,
+): Promise<'found' | 'none' | 'limit'> {
+  return (await scanJscpdSuppression(sourceDirectory, bounds)).state;
 }
 
 /** Default largest report a scanner may write and this module will read. */

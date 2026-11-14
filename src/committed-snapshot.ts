@@ -29,6 +29,8 @@ export interface Snapshot {
    * counted toward `sourceBytes`. Bounded by `binaryFiles`/`binaryTotalBytes`.
    */
   skippedBinary: SkippedBinary;
+  /** Size of the largest `oversized-blob` omission (0 when there is none). Diagnostic only. */
+  largestOversizedBytes: number;
   gitVersion: string;
   dispose(): Promise<void>;
 }
@@ -51,6 +53,34 @@ export const omittedTotal = (o: SnapshotOmissions): number =>
   o['unsupported-path'] +
   o['binary-limit'];
 
+/** Decimal megabytes with two digits (`1.85 MB`), the unit file listings show. */
+export const formatMegabytes = (bytes: number): string =>
+  `${(bytes / 1000000).toFixed(2)} MB`;
+
+/**
+ * Breakdown of WHY a snapshot is partial, by cause, for the report row and the
+ * job summary: counts and the largest oversized blob only, never paths or
+ * content. Causes keep their `OmissionReason` tokens; `binary-skipped` is
+ * informational (those blobs do not make the snapshot incomplete).
+ */
+export function describeOmissions(
+  omitted: SnapshotOmissions,
+  largestOversizedBytes: number,
+  skippedBinary?: SkippedBinary,
+): string {
+  const parts: string[] = [];
+  for (const reason of Object.keys(omitted) as OmissionReason[])
+    if (omitted[reason] > 0)
+      parts.push(
+        reason === 'oversized-blob' && largestOversizedBytes > 0
+          ? `${reason}: ${String(omitted[reason])} (largest ${formatMegabytes(largestOversizedBytes)})`
+          : `${reason}: ${String(omitted[reason])}`,
+      );
+  if (skippedBinary?.count)
+    parts.push(`binary-skipped: ${String(skippedBinary.count)}`);
+  return parts.join(', ');
+}
+
 /**
  * Safety bounds of the committed-snapshot API. Each is a hard cap: exceeding
  * one fails closed with a named `detail`, never a clean result.
@@ -60,7 +90,17 @@ export const snapshotBounds = Object.freeze({
   objectFiles: 100000,
   sourceBytes: 67108864,
   sourceFiles: 10000,
-  sourceFileBytes: 1048576,
+  /**
+   * Largest TEXT blob materialised (was 1 MiB). Beyond it a text blob is an
+   * `oversized-blob` omission and the engines stay incomplete.
+   */
+  sourceFileBytes: 4194304,
+  /**
+   * Per-file bound of the engines that run on the snapshot in this process
+   * (ESLint/TypeScript worker). Unchanged by `sourceFileBytes`: a larger file
+   * is not handed to them and makes them `limited`.
+   */
+  engineFileBytes: 1048576,
   /** Largest blob read only to classify it as binary (over `sourceFileBytes`). */
   binaryBlobBytes: 16777216,
   /** Total bytes of skipped binaries, and separately of over-limit blobs read to classify them. */
@@ -352,6 +392,7 @@ export async function createCommittedSnapshot(options: {
     };
     const skippedBinary: SkippedBinary = { count: 0, bytes: 0 };
     let probedBytes = 0;
+    let largestOversizedBytes = 0;
     let byteCount = 0;
     for (const entry of entries) {
       const match =
@@ -403,6 +444,7 @@ export async function createCommittedSnapshot(options: {
         // omission, so nothing larger than the caps is ever hidden as "binary".
         if (blobSize > snapshotBounds.binaryBlobBytes) {
           omit('oversized-blob');
+          largestOversizedBytes = Math.max(largestOversizedBytes, blobSize);
           continue;
         }
         if (probedBytes + blobSize > snapshotBounds.binaryTotalBytes) {
@@ -434,6 +476,7 @@ export async function createCommittedSnapshot(options: {
       }
       if (overLimit) {
         omit('oversized-blob');
+        largestOversizedBytes = Math.max(largestOversizedBytes, blobSize);
         continue;
       }
       byteCount += blobSize;
@@ -478,6 +521,7 @@ export async function createCommittedSnapshot(options: {
       byteCount,
       omitted,
       skippedBinary,
+      largestOversizedBytes,
       gitVersion: version.trim().slice('git version '.length),
       dispose,
     };

@@ -271,7 +271,11 @@ async function run(args: string[]): Promise<number> {
   ).stdout.trim();
   const scanned: EngineResult[] = await runEngines({
     repo,
-    scope: scopeFromEnvironment(process.env, commitSha),
+    scope: scopeFromEnvironment(
+      process.env,
+      commitSha,
+      local.flags?.repository,
+    ),
     selected,
     tools,
     installErrors: errors,

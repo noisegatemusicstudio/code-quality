@@ -133,6 +133,27 @@ await test('local mode writes a manifest with the flag identity, the git HEAD an
   assert.equal(report.repository, 'acme/widgets');
 });
 
+await test('local mode envelopes name the scanned repository and each manifest version equals its envelope engine.version', () => {
+  // The scan environment carries no GITHUB_REPOSITORY, so only --repository can name it.
+  const r = scan(localFlags);
+  assert.equal(r.status, 0, r.stderr);
+  const engines = manifestOf(r.out).engines as {
+    id: string;
+    version: string | null;
+    envelope: string | null;
+  }[];
+  assert.ok(engines.some((e) => e.envelope !== null));
+  for (const entry of engines) {
+    if (entry.envelope === null) continue;
+    const envelope = JSON.parse(
+      readFileSync(join(r.out, entry.envelope), 'utf8'),
+    ) as { repository: string; engine: { id: string; version: string } };
+    assert.equal(envelope.repository, 'acme/widgets', entry.id);
+    assert.equal(entry.version, envelope.engine.version, entry.id);
+    assert.notEqual(entry.version, 'bundled', entry.id);
+  }
+});
+
 await test('local manifest equals the env-mode manifest for the same identity, except workflowRef', () => {
   const local = manifestOf(scan(localFlags).out);
   const env = scan([], actionsEnv);

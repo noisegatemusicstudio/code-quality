@@ -25,7 +25,6 @@ import { type EslintScanReport, runEslintScan } from './eslint-adapter.js';
 import { resolveTsconfigChain } from './eslint-tsconfig.js';
 import {
   type PrettierScanReport,
-  approvedPrettierVersion as prettierVersion,
   isPrettierInput,
   runPrettierScan,
 } from './prettier-adapter.js';
@@ -41,9 +40,7 @@ import {
   classifyGitleaksEnvelope,
 } from './gitleaks-adapter.js';
 import {
-  checkstyleVersion,
   isJavaFile,
-  pmdVersion,
   pmdVersionOutput,
   runCheckstyleScan,
   runPmdScan,
@@ -55,14 +52,13 @@ import {
   kotlinFile,
   runKotlinScan,
 } from './kotlin-adapter.js';
-import { ruffVersion, runRuffScan } from './ruff-adapter.js';
+import { runRuffScan } from './ruff-adapter.js';
 import {
   runSwiftlintScan,
   swiftFile,
   swiftConfigPath,
   swiftWorkspace,
   swiftlintUnrunnableReason,
-  swiftlintVersion,
 } from './swift-adapter.js';
 import { installZipTree, treeMatches } from './tree-install.js';
 import {
@@ -104,11 +100,7 @@ import {
   trivyPin,
   yamllintPin,
 } from './scanner-pins.js';
-import {
-  releaseReadyRulesVersion,
-  runSemgrepScan,
-  semgrepVersion,
-} from './semgrep-adapter.js';
+import { releaseReadyRulesVersion, runSemgrepScan } from './semgrep-adapter.js';
 import {
   isIacCandidate,
   runTrivyScan,
@@ -339,20 +331,26 @@ const idSafe = (value: string, fallback: string): string => {
   const cleaned = value.replace(/[^A-Za-z0-9._:-]/g, '-').slice(0, 128);
   return /^[A-Za-z0-9]/.test(cleaned) ? cleaned : fallback;
 };
-/** Envelope scope from the GitHub Actions environment, with safe fallbacks. */
+const repositoryPattern = /^[A-Za-z0-9._-]{1,100}\/[A-Za-z0-9._-]{1,100}$/;
+/**
+ * Envelope scope from the GitHub Actions environment, with safe fallbacks. A
+ * local run passes the validated `--repository` flag as `repositoryOverride`,
+ * which wins over GITHUB_REPOSITORY so the envelope names the scanned
+ * repository; a value that fails the same pattern is ignored.
+ */
 export function scopeFromEnvironment(
   environment: Record<string, string | undefined>,
   commitSha: string,
+  repositoryOverride?: string,
 ): EnvelopeScope {
-  const repository = environment.GITHUB_REPOSITORY ?? '';
+  const candidate = repositoryOverride ?? environment.GITHUB_REPOSITORY ?? '';
+  const repository = repositoryPattern.test(candidate)
+    ? candidate
+    : 'local/repository';
   const scope: EnvelopeScope = {
     tenantId: 'github-actions',
-    projectId: idSafe(repository.split('/')[1] ?? '', 'project'),
-    repository: /^[A-Za-z0-9._-]{1,100}\/[A-Za-z0-9._-]{1,100}$/.test(
-      repository,
-    )
-      ? repository
-      : 'local/repository',
+    projectId: idSafe(candidate.split('/')[1] ?? '', 'project'),
+    repository,
     commitSha,
     sourceId: 'github-actions',
     jobId: idSafe(environment.GITHUB_RUN_ID ?? '', 'local'),
@@ -493,15 +491,18 @@ export function applyOmitted(
   };
 }
 
-const fromEnvelope = (
+/**
+ * The manifest version is always the envelope's own `engine.version`, never a
+ * separately kept copy: the collector requires the two to be equal.
+ */
+export const fromEnvelope = (
   engine: EngineId,
   envelope: AdapterEnvelope,
-  version: string,
 ): EngineResult => ({
   engine,
   status: envelope.status,
   reason: envelope.reason,
-  version,
+  version: envelope.engine.version,
   findings: envelope.findings,
   envelope,
   ...(envelope.status === 'skipped'
@@ -802,7 +803,7 @@ async function runLintEngine(
   if (!envelopes.length && !unusable.length && !omitted)
     return failed(id, 'no files to scan');
   const base = envelopes.length
-    ? fromEnvelope(id, mergeEnvelopes(envelopes), lintPins[id].version)
+    ? fromEnvelope(id, mergeEnvelopes(envelopes))
     : failed(id, 'no file could be passed to the engine');
   return applyOmitted(base, omitted + unusable.length, causes);
 }
@@ -866,7 +867,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     );
     return applyOmitted(
       withTypeInfoNotes(
-        withParseFailures(fromEnvelope('eslint', envelope, 'bundled'), report),
+        withParseFailures(fromEnvelope('eslint', envelope), report),
         report,
       ),
       omitted,
@@ -893,7 +894,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     }
     return applyOmitted(
       withPrettierNotes(
-        fromEnvelope('prettier', scanned.envelope, prettierVersion),
+        fromEnvelope('prettier', scanned.envelope),
         scanned.report,
       ),
       omitted,
@@ -925,7 +926,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
       },
       { scope: options.scope, files },
     );
-    const base = fromEnvelope('semgrep', result.envelope, semgrepVersion);
+    const base = fromEnvelope('semgrep', result.envelope);
     return applyOmitted(
       result.refusal
         ? { ...base, reason: result.refusal }
@@ -956,18 +957,13 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
       scope: options.scope,
       files,
     });
-    return applyOmitted(
-      fromEnvelope('ruff', result, ruffVersion),
-      omitted,
-      causes,
-    );
+    return applyOmitted(fromEnvelope('ruff', result), omitted, causes);
   });
 
   // Java: PMD and Checkstyle run source-only on the workflow's JDK. A missing
   // JDK or engine is a failed engine, never a clean one.
   const scanJava = async (
     id: 'pmd' | 'checkstyle',
-    version: string,
     scan: (files: Record<string, string>) => Promise<AdapterEnvelope>,
   ): Promise<EngineResult> => {
     const { files, omitted, causes } = await readBoundedFiles(
@@ -975,11 +971,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
       paths,
       isJavaFile,
     );
-    return applyOmitted(
-      fromEnvelope(id, await scan(files), version),
-      omitted,
-      causes,
-    );
+    return applyOmitted(fromEnvelope(id, await scan(files)), omitted, causes);
   };
   await guard('pmd', async () => {
     const java = options.tools.java;
@@ -995,7 +987,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
           'pmd or java missing, or pmd tree sha256 mismatch',
       );
     const versionOutput = await pmdVersionOutput(java, pmdDirectory);
-    return scanJava('pmd', pmdVersion, (files) =>
+    return scanJava('pmd', (files) =>
       runPmdScan({
         java,
         pmdDirectory,
@@ -1013,7 +1005,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
         'checkstyle',
         options.installErrors.checkstyle ?? 'checkstyle or java missing',
       );
-    return scanJava('checkstyle', checkstyleVersion, (files) =>
+    return scanJava('checkstyle', (files) =>
       runCheckstyleScan({ java, jar, scope: options.scope, files }),
     );
   });
@@ -1057,11 +1049,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
         scope: options.scope,
         files,
       });
-      return applyOmitted(
-        fromEnvelope(id, result, pin.version),
-        omitted,
-        causes,
-      );
+      return applyOmitted(fromEnvelope(id, result), omitted, causes);
     });
   await kotlinEngine('detekt', detektPin, createDetektAdapter);
   await kotlinEngine('ktlint', ktlintPin, createKtlintAdapter);
@@ -1099,7 +1087,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
       scope: options.scope,
       files: workspace.files,
     });
-    const base = fromEnvelope('swiftlint', result, swiftlintVersion);
+    const base = fromEnvelope('swiftlint', result);
     // A binary that cannot start on this host fails the version check; say so
     // plainly (for example a glibc mismatch) instead of a bare envelope reason.
     const unrunnable =
@@ -1154,7 +1142,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
       { scope: options.scope, target: { kind: 'iac', files } },
     );
     return applyOmitted(
-      fromEnvelope('trivy', result.envelope, trivyPin.version),
+      fromEnvelope('trivy', result.envelope),
       omitted,
       causes,
     );
@@ -1164,7 +1152,6 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     readBoundedFiles(options.repo, paths, match);
   const lintResult = async (
     engine: EngineId,
-    version: string,
     adapter: Parameters<typeof runAdapter>[0],
     files: Record<string, string>,
     args: readonly string[],
@@ -1172,7 +1159,6 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     fromEnvelope(
       engine,
       await runAdapter(adapter, { scope: options.scope, files, args }),
-      version,
     );
 
   await guard('hadolint', async () => {
@@ -1211,7 +1197,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     if (!envelopes.length)
       return skipped('hadolint', 'not-applicable', 'no readable Dockerfile');
     return applyOmitted(
-      fromEnvelope('hadolint', mergeEnvelopes(envelopes), hadolintPin.version),
+      fromEnvelope('hadolint', mergeEnvelopes(envelopes)),
       omitted,
       causes,
     );
@@ -1231,7 +1217,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
       files: new Set(Object.keys(files)),
     });
     return applyOmitted(
-      await lintResult('tflint', tflintPin.version, adapter, files, []),
+      await lintResult('tflint', adapter, files, []),
       omitted,
       causes,
     );
@@ -1251,7 +1237,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
       files: new Set(Object.keys(files)),
     });
     return applyOmitted(
-      await lintResult('yamllint', yamllintPin.version, adapter, files, []),
+      await lintResult('yamllint', adapter, files, []),
       omitted,
       causes,
     );
@@ -1275,7 +1261,6 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     return applyOmitted(
       await lintResult(
         'markdownlint',
-        markdownlintPin.version,
         adapter,
         { ...files, ...markdownlintSupportFiles },
         [],
@@ -1343,7 +1328,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
     if (!envelopes.length)
       return failed('osv', 'no lockfile could be read within adapter limits');
     const result = applyOmitted(
-      fromEnvelope('osv', mergeEnvelopes(envelopes), osvPin.version),
+      fromEnvelope('osv', mergeEnvelopes(envelopes)),
       omitted,
     );
     return disclosure ? { ...result, disclosure } : result;

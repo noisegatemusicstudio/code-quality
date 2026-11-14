@@ -18,7 +18,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
 import type { ExecutionSlot } from '../src/customer-scan.js';
-import type { EngineResult } from '../src/quality-scan.js';
+import {
+  buildReport,
+  decide,
+  renderSummary,
+  type EngineResult,
+} from '../src/quality-scan.js';
 import {
   applyOmitted,
   fromSlot,
@@ -124,7 +129,7 @@ await test('bounded reading omits symlinks, non-UTF-8 files and files past the l
   try {
     await mkdir(join(dir, 'src'));
     await writeFile(join(dir, 'src/a.ts'), 'export const a = 1;\n');
-    await writeFile(join(dir, 'src/bin.ts'), Buffer.from([0xff, 0xfe, 0x00]));
+    await writeFile(join(dir, 'src/bin.ts'), Buffer.from([0xff, 0xfe, 0x41]));
     await writeFile(join(dir, 'src/big.ts'), 'x'.repeat(1048577));
     await symlink('/etc/passwd', join(dir, 'src/link.ts'));
     const read = await readBoundedFiles(
@@ -150,6 +155,68 @@ await test('bounded reading omits symlinks, non-UTF-8 files and files past the l
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+await test('binary content is never handed to a text engine, even under a text name or past the size check', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'qs-binary-'));
+  try {
+    await writeFile(join(dir, 'ok.json'), '{"a":1}\n');
+    await writeFile(
+      join(dir, 'image.json'),
+      Buffer.from([
+        0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 13,
+      ]),
+    );
+    await writeFile(join(dir, 'nul.json'), Buffer.from('{"a":\0}'));
+    const read = await readBoundedFiles(
+      dir,
+      ['ok.json', 'image.json', 'nul.json'],
+      () => true,
+    );
+    assert.deepEqual(Object.keys(read.files), ['ok.json']);
+    assert.equal(read.omitted, 2);
+    assert.deepEqual(read.causes, { binary: 2 });
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+await test('skipped binaries are carried onto gitleaks results and the job summary', () => {
+  const slot: ExecutionSlot = {
+    id: 'gitleaks',
+    state: 'completed',
+    evidence: 'executed',
+    coverage: 'committed-text-default-rules',
+    findings: [],
+  };
+  const withBinary = fromSlot('gitleaks', slot, undefined, scope, {
+    count: 3,
+    bytes: 4096,
+  });
+  assert.deepEqual(withBinary.skippedBinary, { count: 3, bytes: 4096 });
+  assert.equal(withBinary.status, 'completed');
+  assert.equal(
+    fromSlot('gitleaks', slot, undefined, scope, { count: 0, bytes: 0 })
+      .skippedBinary,
+    undefined,
+  );
+  const md = renderSummary({
+    commitSha: 'a'.repeat(40),
+    results: [withBinary],
+    decision: decide([withBinary], { enforce: false, failOnSeverity: 'high' }),
+    baseline: null,
+  });
+  assert.match(
+    md,
+    /3 binary file\(s\), 4096 bytes, skipped by content and not text-scanned/,
+  );
+  const report = buildReport({
+    commitSha: 'a'.repeat(40),
+    repository: 'o/r',
+    results: [withBinary],
+    decision: decide([withBinary], { enforce: false, failOnSeverity: 'high' }),
+  }) as { engines: { skippedBinary?: unknown }[] };
+  assert.deepEqual(report.engines[0]?.skippedBinary, { count: 3, bytes: 4096 });
 });
 
 await test('omitted files turn a completed engine into incomplete, never clean', () => {

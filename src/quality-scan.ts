@@ -62,6 +62,8 @@ export interface EngineResult {
   excepted?: number;
   /** What this engine sent off the runner, shown in the job summary. */
   disclosure?: string;
+  /** Binary blobs the committed snapshot skipped (counted, not text-scanned). */
+  skippedBinary?: { count: number; bytes: number };
 }
 
 export type OsvMode = 'online' | 'offline' | 'off';
@@ -410,6 +412,7 @@ export function buildReport(input: {
       skipKind: r.skipKind,
       version: r.version,
       findingCount: r.findings.length,
+      ...(r.skippedBinary ? { skippedBinary: r.skippedBinary } : {}),
       findings: r.findings,
     })),
   };
@@ -489,6 +492,9 @@ export function renderSummary(input: {
       r.status === 'skipped' && r.skipKind ? `skipped (${r.skipKind})` : '',
       r.reason ? mdEscape(r.reason) : '',
       r.excepted ? `${String(r.excepted)} excepted (reviewed exception)` : '',
+      r.skippedBinary?.count
+        ? `${String(r.skippedBinary.count)} binary file(s), ${String(r.skippedBinary.bytes)} bytes, skipped by content and not text-scanned`
+        : '',
     ]
       .filter(Boolean)
       .join(': ');

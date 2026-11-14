@@ -80,6 +80,7 @@ import {
   tflintAdapter,
   yamllintAdapter,
 } from './lint-adapters.js';
+import { isBinaryContent } from './binary-content.js';
 import { adapterLimits, runAdapter } from './scanner-adapter.js';
 import {
   externalPins,
@@ -268,6 +269,7 @@ export type OmissionCause =
   | 'total-size-limit'
   | 'not-regular-file'
   | 'not-utf8'
+  | 'binary'
   | 'unreadable';
 /**
  * Read matching tracked files within the adapter's input limits. Symlinks,
@@ -310,9 +312,13 @@ export async function readBoundedFiles(
       }
       let text: string;
       try {
-        text = new TextDecoder('utf-8', { fatal: true }).decode(
-          await readFileNoFollow(full),
-        );
+        const bytes = await readFileNoFollow(full);
+        // Binary content (by bytes, not name) is never handed to a text engine.
+        if (isBinaryContent(bytes)) {
+          omit('binary');
+          continue;
+        }
+        text = new TextDecoder('utf-8', { fatal: true }).decode(bytes);
       } catch (error) {
         omit(error instanceof TypeError ? 'not-utf8' : 'unreadable');
         continue;
@@ -516,6 +522,7 @@ export function fromSlot(
   slot: ExecutionSlot,
   sourceError: string | undefined,
   scope: EnvelopeScope,
+  skippedBinary?: { count: number; bytes: number },
 ): EngineResult {
   const version = externalPins[engine].version;
   if (sourceError)
@@ -538,6 +545,7 @@ export function fromSlot(
     ...(status === 'completed'
       ? {}
       : { reason: slot.reason ?? `engine state ${slot.state}` }),
+    ...(skippedBinary?.count ? { skippedBinary } : {}),
   };
   if (status === 'completed') {
     const checked = validateEnvelope(
@@ -1379,6 +1387,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
                 ? `${report.sourceError} (${report.sourceDetail})`
                 : report.sourceError,
               options.scope,
+              report.source?.skippedBinary,
             ),
           );
       }

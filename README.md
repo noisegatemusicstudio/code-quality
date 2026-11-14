@@ -129,8 +129,9 @@ execution report, and 2 for invalid input or I/O.
 
 The runtime and supplied Git installation must be trusted. This is not a
 hostile-code sandbox. Snapshot hard caps are a 512 MiB object store, 64 MiB of
-source, 10000 source files and 1 MiB per source file, within a 120 s deadline.
-Symlinks, submodules, non-ASCII paths and text blobs over 1 MiB are not
+source, 10000 source files and 4 MiB per text source file (was 1 MiB), within a
+120 s deadline.
+Symlinks, submodules, non-ASCII paths and text blobs over 4 MiB are not
 materialised: they are counted in `source.omitted` and no engine may then report
 `completed`.
 
@@ -151,17 +152,44 @@ no single binary over 16 MiB (`snapshotBounds.binaryFiles`, `binaryTotalBytes`,
 `binaryBlobBytes`). Binary blobs beyond a cap, and over-limit blobs the probe
 budget (also 256 MiB) cannot classify, are counted in `source.omitted`
 (`oversized-blob` or `binary-limit`) and the engines stay incomplete. A text
-blob over 1 MiB still counts as `oversized-blob`; there is deliberately no
-higher text limit (see "Large text blobs" below).
+blob over 4 MiB still counts as `oversized-blob` and is never treated as clean.
 
-Large text blobs: text files between 1 MiB and the cap (for example a generated
-`openapi.json`) remain `oversized-blob` omissions and keep gitleaks and jscpd
-`incomplete`. A separate higher gitleaks-only limit was not added: the snapshot
-directory is shared with jscpd, ESLint and the TypeScript profile, whose
-per-file behaviour is bounded at 1 MiB, and gitleaks memory and time on larger
-files has not been measured in a supported environment. Raising it needs an
-owner-approved constant and a measured gitleaks run; until then such files are
-reported, never treated as clean.
+Large text blobs (draft, awaiting owner approval; see the bounds table below):
+the per-file text limit of the snapshot is 4 MiB (`snapshotBounds.sourceFileBytes`,
+was 1 MiB), so generated documents such as a 1.6 MB `openapi.json` or a 1.9 MB
+design review page are materialised and scanned by gitleaks and jscpd instead of
+keeping them incomplete. The 64 MiB total, the 10000-file bound and the 120 s
+deadline are unchanged, so a repository above them still fails closed
+(`source-bytes`). Engines keep their own per-file limits: the ESLint/TypeScript
+worker does not read a `.js`/`.ts` file over 1 MiB
+(`snapshotBounds.engineFileBytes`) and reports the engine `limited` with that
+file counted as unresolved; ESLint, Prettier, trivy and the other per-engine
+scans read from the checkout under `adapterLimits.fileBytes` (1 MiB) and
+`totalBytes` (16 MiB), unchanged. gitleaks and jscpd now see text files up to
+4 MiB; their time is bounded by the existing 30 s per-engine timeout and
+`prlimit` caps, and an engine that cannot finish is `timed-out`/`failed`, never
+clean. The effect on gitleaks and jscpd memory and time has not been measured on
+a supported host here.
+
+Every omission is explained in the report. The row `reason` keeps its stable
+token first and appends the breakdown by cause, counts only and never paths or
+content, for example
+`snapshot-entries-omitted (oversized-blob: 3 (largest 1.85 MB), binary-skipped: 750)`;
+the other causes use their own tokens (`symlink`, `submodule`,
+`unsupported-path`, `binary-limit`). `suppression-scan-limit` names the pre-scan
+bound that was hit (`files`, `directories`, `fileBytes`, `totalBytes`), and the
+per-engine rows list `file-count-limit`, `file-too-large` (with the largest
+size), `total-size-limit`, `not-regular-file`, `not-utf8`, `binary` and
+`unreadable` with counts.
+
+trivy reads JSON by content, not just by extension. A tracked `.json` file is
+trivy config input only if its top level is an object with a CloudFormation, ARM,
+Kubernetes or Terraform marker (`isIacContent`). Other JSON (an OpenAPI document,
+generated design data, arrays) cannot be parsed by trivy's JSON checks, so it is
+excluded before the input bounds apply instead of spending the 16 MiB budget or
+being reported as `file-too-large`; unparseable JSON, YAML, TOML, Dockerfiles and
+`.tf.json` are always kept. A real IaC file over a bound is still an omission.
+The trivy bounds themselves are unchanged.
 
 The per-engine scans (`quality-scan-run`, used by trivy, prettier and the other
 text engines) read tracked files from the checkout by extension. They now also
@@ -172,13 +200,16 @@ engine reports incomplete rather than clean. A failed snapshot names the guard i
 
 jscpd bounds (draft, awaiting owner approval of each changed value):
 
-| Bound                                                                                            | Old   | New                                            | Why                                                                                                                                           |
-| ------------------------------------------------------------------------------------------------ | ----- | ---------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Suppression pre-scan files (`suppressionScanBounds.files`)                                       | 1000  | 10000, taken from `snapshotBounds.sourceFiles` | A snapshot the scanner accepted (about 1134 files) failed `suppression-scan-limit`. The pre-scan now cannot be stricter than the snapshot.    |
-| jscpd report cap (`reportBytesCaps.jscpd`: write cap via `prlimit --fsize`, read cap, parse cap) | 1 MiB | 8 MiB, equal to `duplicationInputLimits.bytes` | jscpd's JSON report repeats each clone's source text (`fragment`), which the scanner does not use; a 2.8 MB report failed `report-too-large`. |
+| Bound                                                                                            | Old              | New                                                | Why                                                                                                                                           |
+| ------------------------------------------------------------------------------------------------ | ---------------- | -------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| Suppression pre-scan files (`suppressionScanBounds.files`)                                       | 1000             | 10000, taken from `snapshotBounds.sourceFiles`     | A snapshot the scanner accepted (about 1134 files) failed `suppression-scan-limit`. The pre-scan now cannot be stricter than the snapshot.    |
+| jscpd report cap (`reportBytesCaps.jscpd`: write cap via `prlimit --fsize`, read cap, parse cap) | 1 MiB            | 8 MiB, equal to `duplicationInputLimits.bytes`     | jscpd's JSON report repeats each clone's source text (`fragment`), which the scanner does not use; a 2.8 MB report failed `report-too-large`. |
+| Suppression pre-scan bytes per file (`suppressionScanBounds.fileBytes`)                          | 1 MiB            | 4 MiB, taken from `snapshotBounds.sourceFileBytes` | The pre-scan cannot be stricter than the snapshot that feeds it: a snapshot-accepted file would otherwise fail `suppression-scan-limit`.      |
+| Suppression pre-scan total bytes (`suppressionScanBounds.totalBytes`)                            | 16 MiB           | 64 MiB, taken from `snapshotBounds.sourceBytes`    | A 49 MB text snapshot failed `suppression-scan-limit`.                                                                                        |
+| Snapshot bytes per text file (`snapshotBounds.sourceFileBytes`)                                  | 1 MiB            | 4 MiB                                              | Two to three tracked generated text files per consumer (1.4 to 1.9 MB) kept gitleaks and jscpd incomplete. Still `oversized-blob` beyond it.  |
+| ESLint/TypeScript worker bytes per file (`snapshotBounds.engineFileBytes`, new)                  | 1 MiB (implicit) | 1 MiB, now explicit                                | Keeps the engine at its old bound while the snapshot grows; a larger file makes the engine `limited`.                                         |
 
-Unchanged: pre-scan directories (2000), bytes per file (1 MiB) and total bytes
-(16 MiB); the gitleaks report cap (1 MiB); the clone (20000) and source-file
+Unchanged: pre-scan directories (2000); the gitleaks report cap (1 MiB); the clone (20000) and source-file
 (5000) limits of the duplication parser. Every bound still fails closed:
 `suppression-scan-limit` for the pre-scan, `report-too-large` for an oversized
 report. Not changed: jscpd's own compact EDN reporter was not adopted because

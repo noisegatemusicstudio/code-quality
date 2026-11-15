@@ -1,4 +1,5 @@
-import { readdir, readFile } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
+import { snapshotBounds } from './committed-snapshot.js';
 import { join, dirname } from 'node:path';
 import { ESLint } from 'eslint';
 import js from '@eslint/js';
@@ -13,6 +14,7 @@ async function main() {
   if ((id !== 'eslint' && id !== 'typescript') || !root) throw new Error();
   if (ESLint.version !== '10.13.0' || ts.version !== '5.9.3') throw new Error();
   const files: string[] = [];
+  let unresolved = 0;
   const walk = async (directory: string): Promise<void> => {
     for (const entry of await readdir(directory, { withFileTypes: true })) {
       const path = join(directory, entry.name);
@@ -20,9 +22,14 @@ async function main() {
       else if (
         entry.isFile() &&
         /\.(?:js|cjs|mjs|jsx|ts|cts|mts|tsx)$/.test(entry.name)
-      )
-        files.push(path);
-      else if (!entry.isFile()) throw new Error();
+      ) {
+        // The snapshot may hold text up to `sourceFileBytes`, but these engines
+        // keep their own (smaller) per-file bound: a larger file is not handed
+        // to them and is reported as unresolved, so the engine is `limited`.
+        if ((await stat(path)).size > snapshotBounds.engineFileBytes)
+          unresolved += 1;
+        else files.push(path);
+      } else if (!entry.isFile()) throw new Error();
     }
   };
   await walk(root);
@@ -31,7 +38,6 @@ async function main() {
     return left < right ? -1 : 1;
   });
   let findings = 0;
-  let unresolved = 0;
   let suppressionCount = 0;
   if (id === 'eslint') {
     const lint = new ESLint({

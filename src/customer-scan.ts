@@ -57,6 +57,8 @@ export interface ExecutionSlot {
   findings?: AdapterFinding[];
   toolVersion?: string;
   config?: string;
+  /** Fixed token naming which bound or cause produced `reason` (never content). */
+  detail?: string;
   reason?:
     | ExternalResult['reason']
     | OsvExecutionResult['reason']
@@ -81,6 +83,8 @@ export interface ExecutionReport {
     omitted: SnapshotOmissions;
     /** Binary blobs (by content) skipped and not text-scanned; counted, never hidden. */
     skippedBinary: SkippedBinary;
+    /** Size of the largest `oversized-blob` omission (0 when none); diagnostic only. */
+    largestOversizedBytes: number;
     checkoutIncluded: false;
     dependencyInputs: 'none' | 'declaration-bundle';
     declarationBundle?: {
@@ -193,6 +197,7 @@ export async function scanCommittedSource(options: {
     byteCount: snapshot.byteCount,
     omitted: snapshot.omitted,
     skippedBinary: snapshot.skippedBinary,
+    largestOversizedBytes: snapshot.largestOversizedBytes,
     checkoutIncluded: false,
     dependencyInputs: 'none',
   };

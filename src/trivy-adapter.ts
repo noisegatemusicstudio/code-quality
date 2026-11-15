@@ -138,6 +138,41 @@ export function isIacCandidate(path: string): boolean {
     !trivyControlFiles.has(baseName(path))
   );
 }
+/**
+ * Whether a candidate's CONTENT can be trivy config input. Only JSON is judged:
+ * trivy's JSON parsers (CloudFormation, ARM, Kubernetes, Terraform plan) read a
+ * top-level object, so an array, a scalar or an object without any of their
+ * markers (an OpenAPI document, generated design data) is not input and must
+ * not spend the bounded budget or be reported as omitted. Unparseable JSON, and
+ * every non-JSON candidate (YAML, TOML, Dockerfile, `.tf.json`), is kept, so
+ * this only ever excludes and never hides a file trivy could have read.
+ */
+export function isIacContent(path: string, text: string): boolean {
+  if (!path.endsWith('.json') || path.endsWith('.tf.json')) return true;
+  let root: unknown;
+  try {
+    root = JSON.parse(text);
+  } catch {
+    return true;
+  }
+  if (typeof root !== 'object' || root === null || Array.isArray(root))
+    return false;
+  const keys = new Set(Object.keys(root));
+  const has = (...names: string[]): boolean => names.some((n) => keys.has(n));
+  const schema = (root as { $schema?: unknown }).$schema;
+  return (
+    has('AWSTemplateFormatVersion', 'Resources') ||
+    (keys.has('apiVersion') && keys.has('kind')) ||
+    has('planned_values', 'resource_changes', 'terraform_version') ||
+    (typeof schema === 'string' &&
+      /deploymentTemplate|deploymentParameters|subscriptionDeploymentTemplate/i.test(
+        schema,
+      )) ||
+    (keys.has('contentVersion') && keys.has('resources')) ||
+    has('resource', 'module', 'provider', 'variable', 'terraform', 'locals')
+  );
+}
+
 /** Files Trivy reads implicitly from its working directory: never workspace input. */
 const trivyControlFiles = new Set([
   'trivy.yaml',

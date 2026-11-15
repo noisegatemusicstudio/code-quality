@@ -21,6 +21,11 @@ import {
   validateEnvelope,
 } from './adapter-envelope.js';
 import { scanCommittedSource, type ExecutionSlot } from './customer-scan.js';
+import {
+  describeOmissions,
+  formatMegabytes,
+  snapshotBounds,
+} from './committed-snapshot.js';
 import { type EslintScanReport, runEslintScan } from './eslint-adapter.js';
 import { resolveTsconfigChain } from './eslint-tsconfig.js';
 import {
@@ -104,6 +109,7 @@ import {
 import { releaseReadyRulesVersion, runSemgrepScan } from './semgrep-adapter.js';
 import {
   isIacCandidate,
+  isIacContent,
   runTrivyScan,
   trivyAdapterEngine,
 } from './trivy-adapter.js';
@@ -262,6 +268,10 @@ export interface BoundedFiles {
   omitted: number;
   /** Why files were omitted, by cause (counts only; no paths or content). */
   causes: Partial<Record<OmissionCause, number>>;
+  /** Size of the largest `file-too-large` omission (0 when none). Diagnostic only. */
+  largestOversizedBytes?: number;
+  /** Files a content classifier proved are not input for the engine (not omissions). */
+  notInput?: number;
 }
 export type OmissionCause =
   | 'file-count-limit'
@@ -280,11 +290,24 @@ export async function readBoundedFiles(
   repo: string,
   paths: readonly string[],
   match: (path: string) => boolean,
+  /**
+   * Optional content classifier: `false` proves the file is not input for the
+   * engine (for example a JSON file that is not infrastructure-as-code). It runs
+   * on the decoded text before the file counts toward any engine bound, may read
+   * up to `classifyBytes`, and is only ever used to EXCLUDE; a file it cannot
+   * classify (undecodable, binary, over `classifyBytes`) keeps its normal fate.
+   */
+  classify?: {
+    bytes: number;
+    isInput: (path: string, text: string) => boolean;
+  },
 ): Promise<BoundedFiles> {
   const files: Record<string, string> = {};
   const causes: BoundedFiles['causes'] = {};
   let omitted = 0;
   let total = 0;
+  let largestOversizedBytes = 0;
+  let notInput = 0;
   const omit = (cause: OmissionCause): void => {
     omitted += 1;
     causes[cause] = (causes[cause] ?? 0) + 1;
@@ -302,8 +325,33 @@ export async function readBoundedFiles(
         omit('not-regular-file');
         continue;
       }
+      const probe =
+        classify !== undefined &&
+        info.size <= classify.bytes &&
+        (info.size > adapterLimits.fileBytes ||
+          total + info.size > adapterLimits.totalBytes);
+      if (probe) {
+        // Over an engine bound: look at the content once, so a file that is
+        // provably not engine input is not reported as omitted.
+        try {
+          const bytes = await readFileNoFollow(full);
+          if (
+            !isBinaryContent(bytes) &&
+            !classify.isInput(
+              path,
+              new TextDecoder('utf-8', { fatal: true }).decode(bytes),
+            )
+          ) {
+            notInput += 1;
+            continue;
+          }
+        } catch {
+          /* Unclassifiable: falls through to the ordinary bound handling. */
+        }
+      }
       if (info.size > adapterLimits.fileBytes) {
         omit('file-too-large');
+        largestOversizedBytes = Math.max(largestOversizedBytes, info.size);
         continue;
       }
       if (total + info.size > adapterLimits.totalBytes) {
@@ -323,6 +371,10 @@ export async function readBoundedFiles(
         omit(error instanceof TypeError ? 'not-utf8' : 'unreadable');
         continue;
       }
+      if (classify && !classify.isInput(path, text)) {
+        notInput += 1;
+        continue;
+      }
       total += info.size;
       files[path] = text;
       kept += 1;
@@ -330,7 +382,7 @@ export async function readBoundedFiles(
       omit('unreadable');
     }
   }
-  return { files, omitted, causes };
+  return { files, omitted, causes, largestOversizedBytes, notInput };
 }
 
 const idSafe = (value: string, fallback: string): string => {
@@ -485,10 +537,15 @@ export function applyOmitted(
   result: EngineResult,
   omitted: number,
   causes: BoundedFiles['causes'] = {},
+  largestOversizedBytes = 0,
 ): EngineResult {
   if (omitted === 0 || result.status !== 'completed') return result;
   const detail = Object.entries(causes)
-    .map(([cause, count]) => `${cause}: ${String(count)}`)
+    .map(([cause, count]) =>
+      cause === 'file-too-large' && largestOversizedBytes > 0
+        ? `${cause}: ${String(count)} (largest ${formatMegabytes(largestOversizedBytes)})`
+        : `${cause}: ${String(count)}`,
+    )
     .join(', ');
   return {
     ...result,
@@ -516,6 +573,10 @@ export const fromEnvelope = (
     : {}),
 });
 
+/** Stable reason token first, then the cause breakdown in parentheses. */
+const rowReason = (token: string, detail: string | undefined): string =>
+  detail ? `${token} (${detail})` : token;
+
 /** Map a customer-scan slot (gitleaks/jscpd) onto an engine result. */
 export function fromSlot(
   engine: 'gitleaks' | 'jscpd',
@@ -523,6 +584,8 @@ export function fromSlot(
   sourceError: string | undefined,
   scope: EnvelopeScope,
   skippedBinary?: { count: number; bytes: number },
+  /** Cause breakdown of snapshot omissions (counts only), appended to the row reason. */
+  omissionNote?: string,
 ): EngineResult {
   const version = externalPins[engine].version;
   if (sourceError)
@@ -544,7 +607,14 @@ export function fromSlot(
     findings,
     ...(status === 'completed'
       ? {}
-      : { reason: slot.reason ?? `engine state ${slot.state}` }),
+      : {
+          reason: rowReason(
+            slot.reason ?? `engine state ${slot.state}`,
+            slot.reason === 'snapshot-entries-omitted'
+              ? omissionNote
+              : slot.detail,
+          ),
+        }),
     ...(skippedBinary?.count ? { skippedBinary } : {}),
   };
   if (status === 'completed') {
@@ -886,11 +956,8 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
   await guard('prettier', async () => {
     // Only tracked files are read. Config candidates travel as plain text and
     // are never executed; the runner decides which ones it may honour.
-    const { files, omitted, causes } = await readBoundedFiles(
-      options.repo,
-      paths,
-      isPrettierInput,
-    );
+    const { files, omitted, causes, largestOversizedBytes } =
+      await readBoundedFiles(options.repo, paths, isPrettierInput);
     let scanned: Awaited<ReturnType<typeof runPrettierScan>>;
     try {
       scanned = await runPrettierScan({ scope: options.scope, files });
@@ -907,6 +974,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
       ),
       omitted,
       causes,
+      largestOversizedBytes,
     );
   });
 
@@ -1136,11 +1204,11 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
         'trivy',
         options.installErrors.trivy ?? 'trivy missing or sha256 mismatch',
       );
-    const { files, omitted, causes } = await readBoundedFiles(
-      options.repo,
-      paths,
-      isIacCandidate,
-    );
+    const { files, omitted, causes, largestOversizedBytes } =
+      await readBoundedFiles(options.repo, paths, isIacCandidate, {
+        bytes: snapshotBounds.sourceFileBytes,
+        isInput: isIacContent,
+      });
     const result = await runTrivyScan(
       {
         executable,
@@ -1153,6 +1221,7 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
       fromEnvelope('trivy', result.envelope),
       omitted,
       causes,
+      largestOversizedBytes,
     );
   });
 
@@ -1388,6 +1457,13 @@ export async function runEngines(options: RunOptions): Promise<EngineResult[]> {
                 : report.sourceError,
               options.scope,
               report.source?.skippedBinary,
+              report.source
+                ? describeOmissions(
+                    report.source.omitted,
+                    report.source.largestOversizedBytes,
+                    report.source.skippedBinary,
+                  )
+                : undefined,
             ),
           );
       }

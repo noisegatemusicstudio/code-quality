@@ -225,7 +225,10 @@ await test('symlink, submodule, non-ASCII and oversized entries are counted as o
   const f = await fixture();
   try {
     await symlink('/outside-secret', join(f.root, 'link'));
-    await writeFile(join(f.root, 'big.bin'), 'x'.repeat(1048577));
+    await writeFile(
+      join(f.root, 'big.bin'),
+      'x'.repeat(snapshotBounds.sourceFileBytes + 1),
+    );
     await writeFile(join(f.root, 'caf\u00e9.ts'), 'export const a = 1;\n');
     f.git('add', '.');
     f.git(
@@ -633,7 +636,7 @@ await test('binary classification is by content: a text .png is scanned, an over
     );
     await writeFile(
       join(f.root, 'big.json'),
-      '{"a":"' + 'x'.repeat(1048577) + '"}',
+      '{"a":"' + 'x'.repeat(snapshotBounds.sourceFileBytes + 1) + '"}',
     );
     await writeFile(join(f.root, 'data.json'), pngLike(512));
     const sha = commitAll(f, 'mixed');

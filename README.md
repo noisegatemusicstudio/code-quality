@@ -807,3 +807,7 @@ process exit status alone. Exit 2 means invalid input.
 default quality gate (`gates/default.json`, read by `quality-scan-cli run`) and
 the follow-up slices. Languages without an engine are reported as
 `skipped: no engine yet`, never as clean.
+
+## Licence
+
+Apache-2.0. See [LICENSE](LICENSE).

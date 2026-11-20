@@ -1,6 +1,29 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "description": "Cost: one grouped PR a week, majors wait for owner approval on the Dependency Dashboard, security fixes at any time. Mirrors the releaseready/config preset without its GitHub Packages token.",
   "extends": [
-    "config:recommended"
+    "config:recommended",
+    ":semanticCommitsDisabled",
+    "helpers:pinGitHubActionDigests"
+  ],
+  "timezone": "Asia/Hong_Kong",
+  "schedule": ["before 6am on monday"],
+  "minimumReleaseAge": "3 days",
+  "prConcurrentLimit": 2,
+  "prHourlyLimit": 2,
+  "labels": ["dependencies"],
+  "major": { "dependencyDashboardApproval": true },
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "schedule": ["at any time"],
+    "minimumReleaseAge": null,
+    "labels": ["security"]
+  },
+  "packageRules": [
+    {
+      "description": "One PR a week for every non-major update.",
+      "matchUpdateTypes": ["minor", "patch", "digest", "pin", "pinDigest"],
+      "groupName": "all non-major dependencies"
+    }
   ]
 }

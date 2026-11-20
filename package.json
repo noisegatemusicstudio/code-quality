@@ -87,5 +87,6 @@
     "@typescript-eslint/typescript-estree": {
       "minimatch": "11.0.1"
     }
-  }
+  },
+  "license": "Apache-2.0"
 }

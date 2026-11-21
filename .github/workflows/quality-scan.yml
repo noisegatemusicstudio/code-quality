@@ -97,6 +97,8 @@ jobs:
         run: |
           npm ci --ignore-scripts
           npm run build
+        env:
+          NODE_AUTH_TOKEN: ${{ github.token }}
       # gitleaks and jscpd read committed snapshots, which refuse Git older than
       # 2.47 (README Requirements). Runner images can ship older Git, so build a
       # pinned release from its sha256-verified source tarball and point the scan at it.

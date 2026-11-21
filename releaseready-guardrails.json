@@ -1,0 +1,45 @@
+{
+  "$schema": "./node_modules/@releaseready/config/guardrails/config.schema.json",
+  "allow": [
+    {
+      "rule": "hand-written-archive-parser",
+      "path": "tests/osv-fixtures.ts",
+      "max": 2,
+      "reason": "Test fixture that deliberately builds ZIP bytes (local header signature and raw deflate) so the offline OSV archive validator is tested against crafted valid and malformed archives; it is not production parsing."
+    },
+    {
+      "rule": "copied-schema-primitive",
+      "path": "src/adapter-envelope.ts",
+      "max": 1,
+      "reason": "idPattern validates this repo's own adapter-envelope id field; code-quality does not depend on test-management, so there is no shared reference primitive to import."
+    },
+    {
+      "rule": "copied-canonical-digest",
+      "path": "src/quality-scan-run.ts",
+      "max": 1,
+      "reason": "canonical() sorts keys to fingerprint quality-exceptions.json entries compared against the base commit; swapping in an RFC 8785 library would change fingerprints for existing exceptions, so it stays until a migration is designed."
+    },
+    {
+      "rule": "legacy-marker",
+      "path": "src/external-scanners.ts",
+      "max": 1,
+      "reason": "Doc comment names the counts-only 'legacy output' that parseExternalReport still returns to its caller at the run step; it is current code, not a compatibility shim."
+    },
+    {
+      "rule": "legacy-marker",
+      "path": "src/osv-scanner.ts",
+      "max": 1,
+      "reason": "Doc comment names the strict counts gate parseOsvReport, which runOsvScanner still calls (osv-scanner.ts line 390); current code, not a compatibility layer."
+    },
+    {
+      "rule": "legacy-marker",
+      "path": "tests/quality-measures.test.ts",
+      "max": 2,
+      "reason": "Local test variable 'legacy' holds the pre-5.4.3 jscpd per-file sources report shape that parseJscpdReport must reject as invalid; no legacy code path is kept."
+    }
+  ],
+  "fileLength": {
+    "maxLines": 1476,
+    "reason": "src/quality-scan-run.ts is 1476 lines today; split candidate by responsibility (RRDSCRUM-502 follow-up). This ratchet stops it growing until it is split."
+  }
+}

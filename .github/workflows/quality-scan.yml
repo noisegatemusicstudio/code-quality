@@ -85,6 +85,9 @@ jobs:
       - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
         with:
           node-version: ${{ inputs.node-version }}
+          # Private @releaseready/config devDependency of the scanner tooling.
+          registry-url: https://npm.pkg.github.com
+          scope: '@releaseready'
       # Shared by every JVM engine (Java: PMD, Checkstyle). The scan resolves
       # `java` from JAVA_HOME (src/java-runtime.ts); add JVM engines here, not a second JDK step.
       - name: Set up JDK for JVM engines

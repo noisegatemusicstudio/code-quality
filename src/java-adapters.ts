@@ -27,10 +27,10 @@ import { relativeSourcePath } from './source-paths.js';
  * severity that `normaliseSeverity` maps to the gate's scale. SpotBugs needs
  * compiled classes and is reported skipped (see `spotbugsPin`).
  */
-export const pmdVersion = pmdPin.version;
-export const checkstyleVersion = checkstylePin.version;
-export const pmdRulesetVersion = `pmd-quickstart-${pmdVersion}`;
-export const checkstyleRulesetVersion = `checkstyle-google-checks-${checkstyleVersion}`;
+const pmdVersion = pmdPin.version;
+const checkstyleVersion = checkstylePin.version;
+const pmdRulesetVersion = `pmd-quickstart-${pmdVersion}`;
+const checkstyleRulesetVersion = `checkstyle-google-checks-${checkstyleVersion}`;
 export const isJavaFile = (path: string): boolean => path.endsWith('.java');
 
 type Candidate = Omit<AdapterFinding, 'fingerprint'>;

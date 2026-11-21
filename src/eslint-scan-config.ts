@@ -18,7 +18,7 @@ import {
  * (`@releaseready/code-quality/eslint`), which reads tsconfig without
  * executing project code. See docs/language-profiles.md.
  */
-export const scanFiles = [
+const scanFiles = [
   '**/*.js',
   '**/*.mjs',
   '**/*.cjs',
@@ -28,7 +28,7 @@ export const scanFiles = [
   '**/*.cts',
   '**/*.tsx',
 ];
-export const scanIgnores = [
+const scanIgnores = [
   '**/node_modules/**',
   '**/dist/**',
   '**/build/**',

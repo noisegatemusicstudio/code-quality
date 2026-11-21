@@ -17,7 +17,7 @@ const startsWithBytes = (b: Uint8Array, bytes: number[]): boolean =>
   b.length >= bytes.length && bytes.every((v, i) => b[i] === v);
 
 /** Known image, PDF and font signatures (PNG, JPEG, GIF, WebP, PDF, WOFF, WOFF2, OpenType). */
-export function hasBinaryMagic(head: Uint8Array): boolean {
+function hasBinaryMagic(head: Uint8Array): boolean {
   return (
     startsWithBytes(head, [0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]) ||
     startsWithBytes(head, [0xff, 0xd8, 0xff]) ||

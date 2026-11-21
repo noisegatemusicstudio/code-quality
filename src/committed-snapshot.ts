@@ -38,7 +38,7 @@ export interface SkippedBinary {
   count: number;
   bytes: number;
 }
-export type OmissionReason =
+type OmissionReason =
   | 'symlink'
   | 'submodule'
   | 'oversized-blob'

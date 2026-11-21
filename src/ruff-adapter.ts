@@ -25,8 +25,8 @@ import { ruffPin } from './scanner-pins.js';
  * `convention`) and mapped to the gate's scale by `normaliseSeverity`.
  */
 export const ruffVersion = ruffPin.version;
-export const ruffRulesetVersion = 'ruff-E-F-W-I-B-UP-S-C4-SIM-PL-2026.11.1';
-export const ruffConfigVersion = `bundled-isolated-${ruffVersion}`;
+const ruffRulesetVersion = 'ruff-E-F-W-I-B-UP-S-C4-SIM-PL-2026.11.1';
+const ruffConfigVersion = `bundled-isolated-${ruffVersion}`;
 export const ruffSelect = [
   'E',
   'F',

@@ -58,10 +58,13 @@
   "prettier": "./dist/src/prettier.js",
   "dependencies": {
     "@eslint/js": "10.0.1",
+    "@typescript-eslint/eslint-plugin": "8.72.1",
+    "@typescript-eslint/parser": "8.72.1",
     "ajv": "8.20.0",
     "ajv-formats": "3.0.1",
     "eslint": "10.13.0",
     "eslint-config-prettier": "10.1.8",
+    "espree": "11.2.0",
     "husky": "9.1.7",
     "ignore": "7.0.14",
     "jiti": "2.7.0",

@@ -9,7 +9,7 @@ import { isAbsolute, join } from 'node:path';
  * The JDK is the runner's trusted toolchain and is not sha256-pinned: the
  * engines that run on it (jar or distribution tree) are.
  */
-export const jdkMajor = 21;
+const jdkMajor = 21;
 
 /** Fixed JVM flags: headless, UTF-8, bounded heap, no state outside the workspace. */
 export const jvmFlags: readonly string[] = Object.freeze([

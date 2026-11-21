@@ -21,13 +21,6 @@ import {
  * never written to the workspace, and tflint never downloads a plugin. Native
  * severities are kept; the gate table lives in `normaliseSeverity`.
  */
-export const lintEngineVersions = Object.freeze({
-  hadolint: hadolintPin.version,
-  tflint: tflintPin.version,
-  yamllint: yamllintPin.version,
-  markdownlint: markdownlintPin.version,
-});
-
 type Rec = Record<string, unknown>;
 const isRec = (v: unknown): v is Rec =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -97,7 +90,7 @@ const str = (v: unknown, fallback: string): string =>
 const json = (stdout: string): unknown => JSON.parse(stdout) as unknown;
 
 /** `hadolint -f json`: an array of `{code, column, file, level, line, message}`. */
-export function parseHadolint(
+function parseHadolint(
   stdout: string,
   files: ReadonlySet<string>,
 ): ParsedOutput {
@@ -157,7 +150,7 @@ export function parseTflint(
 const yamllintLine =
   /^(.+?):(\d+):(\d+): \[(error|warning)\] (.*?)(?: \(([a-z0-9-]+)\))?$/;
 /** `yamllint -f parsable`: `path:line:col: [level] message (rule)`. */
-export function parseYamllint(
+function parseYamllint(
   stdout: string,
   files: ReadonlySet<string>,
 ): ParsedOutput {
@@ -184,7 +177,7 @@ export function parseYamllint(
  * default formatter prints to stderr, which adapters do not capture; this one
  * prints one JSON line to stdout. It is ReleaseReady code, not customer code.
  */
-export const markdownlintFormatter = `export default function outputFormatter(options) {
+const markdownlintFormatter = `export default function outputFormatter(options) {
   const rows = options.results.map((r) => ({
     file: r.fileName,
     line: r.lineNumber,
@@ -195,7 +188,7 @@ export const markdownlintFormatter = `export default function outputFormatter(op
   options.logMessage(JSON.stringify(rows));
 }
 `;
-export const markdownlintConfig = `${JSON.stringify({
+const markdownlintConfig = `${JSON.stringify({
   config: { default: true },
   gitignore: false,
   noBanner: true,
@@ -209,7 +202,7 @@ export const markdownlintSupportFiles: Readonly<Record<string, string>> =
     '.rr-formatter.mjs': markdownlintFormatter,
   });
 /** markdownlint's only native level is an error; it is recorded as `error`. */
-export function parseMarkdownlint(
+function parseMarkdownlint(
   stdout: string,
   files: ReadonlySet<string>,
 ): ParsedOutput {
@@ -240,7 +233,7 @@ export function parseMarkdownlint(
 /** Project-owned configuration that must never reach an engine run. */
 export const lintConfigFile =
   /(?:^|\/)(?:\.hadolint\.ya?ml|\.tflint\.hcl|\.yamllint(?:\.ya?ml)?|\.markdownlint(?:-cli2)?\.[A-Za-z]+|\.markdownlintignore)$/;
-export const dockerfilePath =
+const dockerfilePath =
   /(?:^|\/)(?:Dockerfile|Containerfile)(?:\.[A-Za-z0-9_-]+)?$/;
 export const isDockerfile = (p: string): boolean =>
   dockerfilePath.test(p) && !p.endsWith('.dockerignore');

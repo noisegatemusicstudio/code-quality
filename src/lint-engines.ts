@@ -18,7 +18,7 @@ export type LintEngineId = 'shellcheck' | 'shfmt' | 'actionlint' | 'zizmor';
 
 /** Largest file list one adapter run accepts (adapterLimits.args is 32; `--` takes one). */
 export const lintBatchSize = 30;
-export const lintArgChars = 256;
+const lintArgChars = 256;
 
 const isRecord = (v: unknown): v is Record<string, unknown> =>
   typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -296,9 +296,8 @@ export interface LintEngineSpec {
 
 const shellFile = /\.(?:sh|bash|ksh)$/;
 const workflowFile = /(?:^|\/)\.github\/workflows\/[^/]+\.ya?ml$/;
-export const isShellFile = (path: string): boolean => shellFile.test(path);
-export const isWorkflowFile = (path: string): boolean =>
-  workflowFile.test(path);
+const isShellFile = (path: string): boolean => shellFile.test(path);
+const isWorkflowFile = (path: string): boolean => workflowFile.test(path);
 
 /**
  * Bundled defaults only: no repository config is ever passed, and none exists

@@ -7,7 +7,7 @@ export const tsconfigChainLimits = Object.freeze({ files: 20, depth: 10 });
 /** Characters a tsconfig path may use; it becomes one fixed ESLint argument. */
 const pathPattern = /^[A-Za-z0-9._@/-]+$/;
 
-export type TsconfigRefusal =
+type TsconfigRefusal =
   | 'invalid-path'
   | 'not-json'
   | 'not-tracked'

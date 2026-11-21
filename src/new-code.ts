@@ -24,7 +24,7 @@ import type { EngineResult } from './quality-scan.js';
 const exec = promisify(execFile);
 const sha = /^[0-9a-f]{40}$/;
 
-export type BaseSource = 'pull-request-base' | 'base-ref' | 'none';
+type BaseSource = 'pull-request-base' | 'base-ref' | 'none';
 export interface NewCodeOutcome {
   /** Where the comparison base came from. */
   baseSource: BaseSource;
@@ -36,7 +36,7 @@ export interface NewCodeOutcome {
 }
 
 /** The pull request's base SHA from the Actions event payload, or null. */
-export async function pullRequestBaseSha(
+async function pullRequestBaseSha(
   env: Readonly<Record<string, string | undefined>>,
   readEvent: (path: string) => Promise<string>,
 ): Promise<string | null | undefined> {
@@ -59,7 +59,7 @@ export async function pullRequestBaseSha(
 }
 
 /** Resolve a ref to a commit in the local repository; never fetches. */
-export async function resolveCommit(
+async function resolveCommit(
   git: string,
   repo: string,
   ref: string,
@@ -204,7 +204,7 @@ async function lineCount(
  * added to `analyzed` with its committed line count; otherwise new code with no
  * duplication at all would have no denominator.
  */
-export async function duplicationFromEngine(
+async function duplicationFromEngine(
   result: EngineResult | undefined,
   input: {
     git: string;
@@ -273,7 +273,7 @@ export async function duplicationFromEngine(
  * The report is never produced here and is unverified: it is assumed to match
  * the scanned commit, and only files it names are in the file set.
  */
-export function coverageFromReport(
+function coverageFromReport(
   raw: string | undefined,
   input: { repo: string; headSha: string; tracked: readonly string[] },
 ): CoverageDetail | undefined {

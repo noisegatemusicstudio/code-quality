@@ -124,7 +124,7 @@ const sha256 = (bytes: Uint8Array): string =>
 
 export type Downloader = (url: string) => Promise<Uint8Array>;
 const maxAssetBytes = 300 * 1024 * 1024;
-export const defaultDownloader: Downloader = async (url) => {
+const defaultDownloader: Downloader = async (url) => {
   if (!url.startsWith('https://')) throw new Error('https only');
   const response = await fetch(url, { redirect: 'follow' });
   if (!response.ok)
@@ -238,7 +238,7 @@ async function readFileNoFollow(path: string): Promise<Buffer> {
 }
 
 /** True only when the file at `path` hashes to `expected`. */
-export async function executableMatches(
+async function executableMatches(
   path: string,
   expected: string,
 ): Promise<boolean> {
@@ -273,7 +273,7 @@ export interface BoundedFiles {
   /** Files a content classifier proved are not input for the engine (not omissions). */
   notInput?: number;
 }
-export type OmissionCause =
+type OmissionCause =
   | 'file-count-limit'
   | 'file-too-large'
   | 'total-size-limit'
@@ -442,7 +442,7 @@ const failed = (engine: EngineId, reason: string): EngineResult => ({
  * the same scrubbed environment and insist the first line is the pinned
  * version (the binary itself is already sha256-pinned).
  */
-export async function trivyVersionOutput(executable: string): Promise<string> {
+async function trivyVersionOutput(executable: string): Promise<string> {
   const { stdout } = await exec(executable, ['--version'], {
     env: { LANG: 'C', LC_ALL: 'C', TZ: 'UTC' },
     timeout: 10000,
@@ -457,7 +457,7 @@ export async function trivyVersionOutput(executable: string): Promise<string> {
  * Read `--version` once under the scrubbed environment and insist it names the
  * pinned version (the binary or wheel is already hash-pinned).
  */
-export async function lintVersionOutput(
+async function lintVersionOutput(
   executable: string,
   expectedVersion: string,
 ): Promise<string> {
@@ -515,7 +515,7 @@ export function withTypeInfoNotes(
  * config it would not honour (JS/TS config, plugins, custom parsers), which
  * means the repository's own settings were replaced by Prettier defaults.
  */
-export function withPrettierNotes(
+function withPrettierNotes(
   result: EngineResult,
   report: PrettierScanReport,
 ): EngineResult {
@@ -661,7 +661,7 @@ export interface RunOptions {
 }
 
 /** `--version` of a verified jar under the scrubbed environment; it must name the pinned version. */
-export async function jarVersionOutput(
+async function jarVersionOutput(
   java: string,
   jar: string,
   expectedVersion: string,

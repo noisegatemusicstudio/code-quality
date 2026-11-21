@@ -37,7 +37,7 @@ export const engineIds = [
   'markdownlint',
 ] as const;
 export type EngineId = (typeof engineIds)[number];
-export type EngineStatus = 'completed' | 'failed' | 'incomplete' | 'skipped';
+type EngineStatus = 'completed' | 'failed' | 'incomplete' | 'skipped';
 export const severityLevels = [
   'info',
   'low',
@@ -111,7 +111,7 @@ const workflowFile = /(?:^|\/)\.github\/workflows\/[^/]+\.ya?ml$/;
 const iacFile =
   /(?:\.(?:tf|tfvars|tf\.json|ya?ml|json|toml)|(?:^|\/)(?:Dockerfile|Containerfile)(?:\.[A-Za-z0-9_-]+)?)$/;
 /** Lockfiles osv-scanner understands; the offline adapter itself is npm-only. */
-export const supportedLockfiles: readonly string[] = [
+const supportedLockfiles: readonly string[] = [
   'package-lock.json',
   'npm-shrinkwrap.json',
   'yarn.lock',
@@ -427,7 +427,7 @@ export const unknownText = (reason: string): string =>
       : reason.replace(/-/g, ' ');
 
 /** Escape text for a Markdown table cell so engine output cannot inject markup. */
-export const mdEscape = (value: string): string =>
+const mdEscape = (value: string): string =>
   value
     .replace(/[\r\n]+/g, ' ')
     .replace(/[\\`*_{}[\]<>()#+!|~&]/g, (c) => `\\${c}`)

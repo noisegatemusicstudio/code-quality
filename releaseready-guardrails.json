@@ -36,10 +36,12 @@
       "path": "tests/quality-measures.test.ts",
       "max": 2,
       "reason": "Local test variable 'legacy' holds the pre-5.4.3 jscpd per-file sources report shape that parseJscpdReport must reject as invalid; no legacy code path is kept."
+    },
+    {
+      "rule": "oversized-source-file",
+      "path": "src/quality-scan-run.ts",
+      "max": 1,
+      "reason": "src/quality-scan-run.ts orchestrates the whole quality scan run (source snapshot, scanner execution, exceptions, report assembly); split candidate, currently 1476 lines."
     }
-  ],
-  "fileLength": {
-    "maxLines": 1476,
-    "reason": "src/quality-scan-run.ts is 1476 lines today; split candidate by responsibility (RRDSCRUM-502 follow-up). This ratchet stops it growing until it is split."
-  }
+  ]
 }

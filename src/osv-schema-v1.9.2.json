@@ -21,7 +21,10 @@
       "$ref": "#/$defs/timestamp"
     },
     "aliases": {
-      "type": ["array", "null"],
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "type": "string"
       }
@@ -48,7 +51,10 @@
       "$ref": "#/$defs/severity"
     },
     "affected": {
-      "type": ["array", "null"],
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "type": "object",
         "properties": {
@@ -65,7 +71,10 @@
                 "type": "string"
               }
             },
-            "required": ["ecosystem", "name"]
+            "required": [
+              "ecosystem",
+              "name"
+            ]
           },
           "severity": {
             "$ref": "#/$defs/severity"
@@ -77,7 +86,11 @@
               "properties": {
                 "type": {
                   "type": "string",
-                  "enum": ["GIT", "SEMVER", "ECOSYSTEM"]
+                  "enum": [
+                    "GIT",
+                    "SEMVER",
+                    "ECOSYSTEM"
+                  ]
                 },
                 "repo": {
                   "type": "string"
@@ -86,7 +99,9 @@
                   "title": "events must contain an introduced object and may contain fixed, last_affected or limit objects",
                   "type": "array",
                   "contains": {
-                    "required": ["introduced"]
+                    "required": [
+                      "introduced"
+                    ]
                   },
                   "items": {
                     "type": "object",
@@ -98,7 +113,9 @@
                             "type": "string"
                           }
                         },
-                        "required": ["introduced"]
+                        "required": [
+                          "introduced"
+                        ]
                       },
                       {
                         "type": "object",
@@ -107,7 +124,9 @@
                             "type": "string"
                           }
                         },
-                        "required": ["fixed"]
+                        "required": [
+                          "fixed"
+                        ]
                       },
                       {
                         "type": "object",
@@ -116,7 +135,9 @@
                             "type": "string"
                           }
                         },
-                        "required": ["last_affected"]
+                        "required": [
+                          "last_affected"
+                        ]
                       },
                       {
                         "type": "object",
@@ -125,7 +146,9 @@
                             "type": "string"
                           }
                         },
-                        "required": ["limit"]
+                        "required": [
+                          "limit"
+                        ]
                       }
                     ]
                   },
@@ -146,7 +169,9 @@
                     }
                   },
                   "then": {
-                    "required": ["repo"]
+                    "required": [
+                      "repo"
+                    ]
                   }
                 },
                 {
@@ -171,7 +196,9 @@
                                   "pattern": "^(0|[a-f0-9]{40}|[a-f0-9]{64})$"
                                 }
                               },
-                              "required": ["introduced"]
+                              "required": [
+                                "introduced"
+                              ]
                             },
                             {
                               "type": "object",
@@ -181,7 +208,9 @@
                                   "pattern": "^(0|[a-f0-9]{40}|[a-f0-9]{64})$"
                                 }
                               },
-                              "required": ["fixed"]
+                              "required": [
+                                "fixed"
+                              ]
                             },
                             {
                               "type": "object",
@@ -191,7 +220,9 @@
                                   "pattern": "^(0|[a-f0-9]{40}|[a-f0-9]{64})$"
                                 }
                               },
-                              "required": ["last_affected"]
+                              "required": [
+                                "last_affected"
+                              ]
                             },
                             {
                               "type": "object",
@@ -201,7 +232,9 @@
                                   "pattern": "^(0|[a-f0-9]{40}|[a-f0-9]{64})$"
                                 }
                               },
-                              "required": ["limit"]
+                              "required": [
+                                "limit"
+                              ]
                             }
                           ]
                         }
@@ -215,7 +248,9 @@
                     "properties": {
                       "events": {
                         "contains": {
-                          "required": ["last_affected"]
+                          "required": [
+                            "last_affected"
+                          ]
                         }
                       }
                     }
@@ -225,7 +260,9 @@
                       "properties": {
                         "events": {
                           "contains": {
-                            "required": ["fixed"]
+                            "required": [
+                              "fixed"
+                            ]
                           }
                         }
                       }
@@ -233,7 +270,10 @@
                   }
                 }
               ],
-              "required": ["type", "events"]
+              "required": [
+                "type",
+                "events"
+              ]
             }
           },
           "versions": {
@@ -252,7 +292,10 @@
       }
     },
     "references": {
-      "type": ["array", "null"],
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "type": "object",
         "properties": {
@@ -277,7 +320,10 @@
             "format": "uri"
           }
         },
-        "required": ["type", "url"]
+        "required": [
+          "type",
+          "url"
+        ]
       }
     },
     "credits": {
@@ -310,18 +356,25 @@
             ]
           }
         },
-        "required": ["name"]
+        "required": [
+          "name"
+        ]
       }
     },
     "database_specific": {
       "type": "object"
     }
   },
-  "required": ["id", "modified"],
+  "required": [
+    "id",
+    "modified"
+  ],
   "allOf": [
     {
       "if": {
-        "required": ["severity"]
+        "required": [
+          "severity"
+        ]
       },
       "then": {
         "properties": {
@@ -415,20 +468,32 @@
       "pattern": "^(x_|(ASB-A|PUB-A|ALPINE|ALSA|ALBA|ALEA|AZL|BELL|BIT|BREW|CGA|CLEANSTART|CLSA|CURL|CVE|DEBIAN|DHI|DRUPAL|DSA|DLA|ELA|DTSA|ECHO|EEF|FreeBSD|GHSA|GO|GSD|HSEC|JLSEC|KUBE|LBSEC|LSN|MAL|MINI|MGASA|OESA|OSEC|OSV|openSUSE-SU|PHSA|PSF|PYSEC|RHBA|RHEA|RHLW|RHSA|RLSA|RXSA|RSEC|ROOT|RUSTSEC|SUSE-[SRFO]U|UBUNTU|USN|V8|VCPKG)-)"
     },
     "severity": {
-      "type": ["array", "null"],
+      "type": [
+        "array",
+        "null"
+      ],
       "items": {
         "type": "object",
         "properties": {
           "type": {
             "type": "string",
-            "enum": ["CVSS_V2", "CVSS_V3", "CVSS_V4", "Ubuntu"]
+            "enum": [
+              "CVSS_V2",
+              "CVSS_V3",
+              "CVSS_V4",
+              "Ubuntu"
+            ]
           },
           "score": {
             "type": "string"
           },
           "source": {
             "type": "string",
-            "enum": ["NVD", "CNA", "SELF"]
+            "enum": [
+              "NVD",
+              "CNA",
+              "SELF"
+            ]
           }
         },
         "allOf": [
@@ -491,13 +556,22 @@
             "then": {
               "properties": {
                 "score": {
-                  "enum": ["negligible", "low", "medium", "high", "critical"]
+                  "enum": [
+                    "negligible",
+                    "low",
+                    "medium",
+                    "high",
+                    "critical"
+                  ]
                 }
               }
             }
           }
         ],
-        "required": ["type", "score"]
+        "required": [
+          "type",
+          "score"
+        ]
       }
     },
     "timestamp": {

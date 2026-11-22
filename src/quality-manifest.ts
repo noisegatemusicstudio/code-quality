@@ -2,7 +2,7 @@ import { hasControl } from './adapter-envelope.js';
 import type { EngineResult } from './quality-scan.js';
 
 /** One engine entry of `manifest.json`. */
-export interface ManifestEngine {
+interface ManifestEngine {
   id: string;
   version: string | null;
   status: EngineResult['status'];
@@ -30,7 +30,7 @@ export interface QualityManifest {
   /** New-code measures; null when the CLI computed none. */
   measures: ManifestMeasure[] | null;
 }
-export interface ManifestMeasure {
+interface ManifestMeasure {
   id: string;
   state: 'known' | 'unknown';
   percent: number | null;

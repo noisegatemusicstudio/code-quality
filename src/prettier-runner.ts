@@ -14,7 +14,7 @@ import * as prettier from 'prettier';
  * JSON or YAML config is handed to `resolveConfig` (no directory search, no
  * `.editorconfig`, no `package.json`).
  */
-export type FileState = 'unformatted' | 'error';
+type FileState = 'unformatted' | 'error';
 export interface RunnerFile {
   path: string;
   state: FileState;
@@ -140,7 +140,7 @@ function sanitise(
   return clean;
 }
 
-export async function runPrettier(root: string): Promise<RunnerOutput> {
+async function runPrettier(root: string): Promise<RunnerOutput> {
   const all = await walk(root);
   const present = new Set(all.filter((p) => baseName(p) !== 'package.json'));
   const rejected = new Set(all.filter((p) => rejectedConfig.test(baseName(p))));

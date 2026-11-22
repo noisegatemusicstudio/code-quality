@@ -1,0 +1,18 @@
+{
+  // Real entry points that knip cannot infer: they are run as built files
+  // (dist/src/*.js) from package.json scripts, the quality-scan workflow and
+  // README, or are loaded by path at runtime. Listed per file, never by folder.
+  "entry": [
+    "src/build-assets.ts", // `npm run build` runs dist/src/build-assets.js
+    "src/scan-cli.ts", // README/`scan:committed` CLI: dist/src/scan-cli.js
+    "src/quality-scan-cli.ts", // quality-scan workflow and README CLI
+    "src/eslint-scan-config-typed.ts", // loaded by file name in src/eslint-adapter.ts
+  ],
+  "ignoreDependencies": [
+    // Not imported by code. The quality-scan workflow runs `npm ci` in
+    // .quality-tool and executes node_modules/markdownlint-cli2/
+    // markdownlint-cli2-bin.mjs (sha256-pinned in src/scanner-pins.ts).
+    // Removing it would break the Markdown scan.
+    "markdownlint-cli2",
+  ],
+}

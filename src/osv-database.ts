@@ -263,7 +263,7 @@ async function validateArchive(
   let withdrawnCount = 0;
   let usableCount = 0;
   let noAffectedCount = 0;
-  const intervals: { start: number; end: number }[] = [];
+  const intervals: { start: number; dataEnd: number; entry: Entry }[] = [];
   for await (const entry of zip.eachEntry()) {
     if (++entryCount > limits.entries) reject();
     validateEntry(entry, names);
@@ -299,31 +299,14 @@ async function validateArchive(
         header.uncompressedSize !== entry.uncompressedSize)
     )
       reject();
-    let dataEnd = header.fileDataStart + entry.compressedSize;
-    if ((entry.generalPurposeBitFlag & 8) !== 0) {
-      // Descriptor values must agree, whether the optional signature is used.
-      if (dataEnd + 12 > centralStart) reject();
-      const descriptor = await readAt(
-        dataEnd,
-        Math.min(16, centralStart - dataEnd),
-      );
-      const descriptorOffset =
-        descriptor.readUInt32LE(0) === 0x08074b50 ? 4 : 0;
-      dataEnd += descriptorOffset;
-      if (
-        dataEnd + 12 > centralStart ||
-        descriptor.readUInt32LE(descriptorOffset) !== entry.crc32 ||
-        descriptor.readUInt32LE(descriptorOffset + 4) !==
-          entry.compressedSize ||
-        descriptor.readUInt32LE(descriptorOffset + 8) !== entry.uncompressedSize
-      )
-        reject();
-      dataEnd += 12;
-    }
+    // The data descriptor (12 or 16 bytes) is sized by the gap to the next
+    // local header below; no descriptor signature is read or interpreted.
+    const dataEnd = header.fileDataStart + entry.compressedSize;
     if (dataEnd > centralStart) reject();
     intervals.push({
       start: entry.relativeOffsetOfLocalHeader,
-      end: dataEnd,
+      dataEnd,
+      entry,
     });
     const advisory = await readAdvisory(zip, entry);
     const warnings = validateOsvRecord(advisory, profile);
@@ -355,15 +338,31 @@ async function validateArchive(
     }
   }
   intervals.sort((a, b) => a.start - b.start);
-  if (
-    intervals.some(
-      (item, index) =>
-        item.start !== (index === 0 ? 0 : intervals[index - 1].end),
-    ) ||
-    (intervals.length ? intervals[intervals.length - 1].end : 0) !==
-      centralStart
-  )
-    reject();
+  // Entries must tile the file from byte 0 to the central directory, with only
+  // the descriptor length (none, or 12/16 bytes) between data and next header.
+  let gapOk = true;
+  for (const [index, item] of intervals.entries()) {
+    const next =
+      index + 1 < intervals.length ? intervals[index + 1].start : centralStart;
+    const gap = next - item.dataEnd;
+    if ((item.entry.generalPurposeBitFlag & 8) === 0) {
+      gapOk &&= gap === 0;
+      continue;
+    }
+    if (gap !== 12 && gap !== 16) {
+      gapOk = false;
+      continue;
+    }
+    // Descriptor values (crc, compressed, uncompressed) are the final 12 bytes
+    // whether or not the optional signature precedes them.
+    const values = await readAt(next - 12, 12);
+    gapOk &&=
+      values.readUInt32LE(0) === item.entry.crc32 &&
+      values.readUInt32LE(4) === item.entry.compressedSize &&
+      values.readUInt32LE(8) === item.entry.uncompressedSize;
+  }
+  if (!gapOk || (intervals.length > 0 && intervals[0].start !== 0)) reject();
+  if (intervals.length === 0 && centralStart !== 0) reject();
   if (entryCount !== zip.entryCount || centralBytes !== envelope.size) reject();
   return {
     validationProfile: profile,

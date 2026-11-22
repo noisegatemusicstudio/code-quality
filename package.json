@@ -52,7 +52,7 @@
     "check:staged": "node dist/src/check-paths.js && lint-staged --config dist/src/lint-staged.js --hide-unstaged",
     "test": "node --test dist/tests/*.test.js",
     "check:guardrails": "releaseready-guardrails",
-    "check": "npm run build && npm run format:check && npm run lint && npm test",
+    "check": "npm run build && npm run format:check && npm run lint && npm test && npm run check:guardrails",
     "prepare": "npm run build",
     "setup:dev": "npm run build && husky"
   },

@@ -1,3 +1,7 @@
+// Test classification: integration
+// Review status: Not Reviewed
+// Evidence: synthetic
+// Scope: Runs the commit hooks, the filename guard and developer setup against temporary Git repositories with the real git and npm binaries; it does not exercise the scanner, real customer code or hosted CI.
 import assert from 'node:assert/strict';
 import sharedPrettier from '../src/prettier.js';
 import { test } from 'node:test';

@@ -13,9 +13,6 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 20
-    env:
-      # The hooks test installs this repo as a git dependency, which installs the private @releaseready/config devDependency too.
-      NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - uses: actions/checkout@df4cb1c069e1874edd31b4311f1884172cec0e10 # v6.0.3
         with:
@@ -26,9 +23,15 @@ jobs:
           cache: npm
           registry-url: https://npm.pkg.github.com
           scope: '@releaseready'
+      # Only the steps that fetch the private @releaseready/config package get the packages token.
       - run: npm ci --ignore-scripts
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npm run build
       - run: npm run format:check
       - run: npm run lint
+      # The hooks test installs this repo as a git dependency, which installs the private devDependency too.
       - run: npm test
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
       - run: npm run check:guardrails

@@ -1,3 +1,7 @@
+// Test classification: integration
+// Review status: Not Reviewed
+// Evidence: synthetic
+// Scope: Runs the commit hooks, the filename guard and developer setup against temporary Git repositories with the real git and npm binaries; it does not exercise the scanner, real customer code or hosted CI.
 import assert from 'node:assert/strict';
 import sharedPrettier from '../src/prettier.js';
 import { test } from 'node:test';
@@ -44,6 +48,14 @@ const registryEnvironment = Object.fromEntries(
     return value === undefined ? [] : [[key, value]];
   }),
 );
+
+// The fixture clone installs the private @releaseready/config devDependency, which needs a GitHub Packages token.
+// Pass only that one credential, as npm's per-registry auth variable, never the user's npm configuration.
+const packagesToken = process.env.NODE_AUTH_TOKEN;
+if (packagesToken) {
+  registryEnvironment['npm_config_//npm.pkg.github.com/:_authToken'] =
+    packagesToken;
+}
 
 function command(cwd: string, executable: string, args: string[]) {
   const result = spawnSync(executable, args, {

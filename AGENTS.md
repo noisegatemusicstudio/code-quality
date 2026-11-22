@@ -28,3 +28,12 @@ This is the owner's standing rule for every project. A project's own rules may a
 - **Label drafts.** Say "draft" or "proposal" wherever an unapproved design appears. Never describe a design as approved, shipped or live without a recorded approval. Previews and prototypes made to get a design reviewed count as design work, not implementation. They use synthetic data and say they are previews.
 - **Approval is the owner's.** Silence, a green build, a merged pull request or an agent's own review is not approval. When a design is ready for review, say where it is and what is waiting for approval.
 - **No approved design, no implementation.** If asked to implement something that has no approved design, add the design to the library first, mark it for review, and report that implementation is waiting on approval. Fixing a bug that does not change a design is not covered.
+
+## Code quality (all changes)
+
+Follow `skills/releaseready-code-quality/SKILL.md` before writing code and before saying a change is done: no legacy
+or compatibility code without a named consumer; search npm, the SDK, the framework or the CLI before writing a
+helper; import shared code from `@releaseready/test-management`, TDM `dev-fixtures`, `@releaseready/config`,
+`@releaseready/ui-web` or `@releaseready/tokens`, never copy it; depend on published `^` versions only; never weaken
+a lint rule, test or guard to go green, and give every disable comment a reason; READMEs describe today's code.
+The check commands are `npm run check` and `npm run check:guardrails`; `ci.yml` enforces the guardrails on every PR.

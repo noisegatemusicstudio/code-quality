@@ -8,6 +8,12 @@
       "reason": "Test fixture that deliberately builds ZIP bytes (local header signature and raw deflate) so the offline OSV archive validator is tested against crafted valid and malformed archives; it is not production parsing."
     },
     {
+      "rule": "hand-written-archive-parser",
+      "path": "tests/osv-zip-library.test.ts",
+      "max": 1,
+      "reason": "Guard test that fails if the ZIP data-descriptor signature literal reappears in src/osv-database.ts; the literal appears only inside the regex that forbids it, no ZIP is parsed."
+    },
+    {
       "rule": "copied-schema-primitive",
       "path": "src/adapter-envelope.ts",
       "max": 1,

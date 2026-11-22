@@ -47,6 +47,7 @@ on:
 
 permissions:
   contents: read
+  packages: read # private @releaseready/config devDependency of the scanner tooling
 
 jobs:
   scan:

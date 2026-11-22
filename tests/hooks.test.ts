@@ -45,6 +45,14 @@ const registryEnvironment = Object.fromEntries(
   }),
 );
 
+// The fixture clone installs the private @releaseready/config devDependency, which needs a GitHub Packages token.
+// Pass only that one credential, as npm's per-registry auth variable, never the user's npm configuration.
+const packagesToken = process.env.NODE_AUTH_TOKEN;
+if (packagesToken) {
+  registryEnvironment['npm_config_//npm.pkg.github.com/:_authToken'] =
+    packagesToken;
+}
+
 function command(cwd: string, executable: string, args: string[]) {
   const result = spawnSync(executable, args, {
     cwd,

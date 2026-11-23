@@ -4,5 +4,5 @@ description: Code-quality rules for every change in any releaseready repo (Relea
 ---
 
 This is a loader stub. The skill lives at `skills/releaseready-code-quality/SKILL.md` (from the repo root), copied from
-`@releaseready/config`. Read that file and its `references/` and follow them. Never edit the copy here or there:
+`@buildproveship/config`. Read that file and its `references/` and follow them. Never edit the copy here or there:
 change it in the config repo and run `npx releaseready-guardrails sync`.

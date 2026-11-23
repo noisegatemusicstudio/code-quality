@@ -22,8 +22,8 @@ jobs:
           node-version: 22.23.4
           cache: npm
           registry-url: https://npm.pkg.github.com
-          scope: '@releaseready'
-      # Only the steps that fetch the private @releaseready/config package get the packages token.
+          scope: '@buildproveship'
+      # Only the steps that fetch the private @buildproveship/config package get the packages token.
       - run: npm ci --ignore-scripts
         env:
           NODE_AUTH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

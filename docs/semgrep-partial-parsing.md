@@ -21,7 +21,7 @@ So `export type *` (TypeScript 5.0) is the trigger in `src/jira/panel.ts:4` and
 `import("./annotations").SourceAnnotations` line in `wire.generated.d.ts` (it parses in the
 small repro, so it is probably collateral of another construct in that file or a `.d.ts`
 specific form) and the Appium repo's Semgrep errors. This session was denied access to
-`releaseready/test-management` and `releaseready/universal-appium2-framework`, so neither
+`buildproveship/test-management` and `releaseready/universal-appium2-framework`, so neither
 repo nor the Appium report artifact was inspected.
 
 ## Newer Semgrep

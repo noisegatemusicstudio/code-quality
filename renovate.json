@@ -1,6 +1,6 @@
 {
   "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "description": "Cost: one grouped PR a week, majors wait for owner approval on the Dependency Dashboard, security fixes at any time. Mirrors the releaseready/config preset without its GitHub Packages token.",
+  "description": "Cost: one grouped PR a week, majors wait for owner approval on the Dependency Dashboard, security fixes at any time. Mirrors the buildproveship/config preset without its GitHub Packages token.",
   "extends": [
     "config:recommended",
     ":semanticCommitsDisabled",

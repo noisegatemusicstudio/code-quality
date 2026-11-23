@@ -1,7 +1,7 @@
 # Language profiles and default quality gate
 
 Owner direction (2026-11-12): use industry standards for code quality per
-language. This repository replaces SonarQube for every ReleaseReady repository.
+language. This repository replaces SonarQube for every BuildProveShip repository.
 Reviewed 2026-11-12. Engineering licence summary, **not legal advice**.
 
 Versions below are the latest stable upstream tags found on the review date
@@ -17,7 +17,7 @@ not to be bundled or shipped until counsel confirms).
 
 ## 1. Repository inventory
 
-Tracked files, shallow clones, lockfiles excluded. All 11 ReleaseReady
+Tracked files, shallow clones, lockfiles excluded. All 11 BuildProveShip
 repositories are inventoried (the last six on 12 Nov 2026, slice 15).
 
 | Repository                                    | Languages and file types (tracked files)                                                                     | Build / test tooling                                                                | IaC / container / CI                                            | Existing lint intent                                                                                               |
@@ -153,7 +153,7 @@ scanned checkout with no network access:
 - **Pull requests** use the PR base SHA from the event payload (a `--base-ref`
   is ignored). The base commit must be in the clone (the workflow checks out
   full history); if it is missing the measures are `unknown`.
-- **Pushes and local runs** (including the ReleaseReady Dev app) use
+- **Pushes and local runs** (including the BuildProveShip Dev app) use
   `--base-ref REF` (workflow input `base-ref`). Without one the measures are
   `unknown: no comparison base`.
 - **Coverage** is never produced by the scan. Pass `--coverage PATH` (workflow

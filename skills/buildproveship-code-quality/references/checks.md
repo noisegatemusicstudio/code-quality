@@ -99,7 +99,7 @@ Every repo's `AGENTS.md` and `CLAUDE.md` carry this block (with the repo's check
 ```markdown
 ## Code quality (all changes)
 
-Follow `skills/releaseready-code-quality/SKILL.md` before writing code and before saying a change is done: no legacy
+Follow `skills/buildproveship-code-quality/SKILL.md` before writing code and before saying a change is done: no legacy
 or compatibility code without a named consumer; search npm, the SDK, the framework or the CLI before writing a
 helper; import shared code from `@buildproveship/test-management`, TDM `dev-fixtures`, `@buildproveship/config`,
 `@buildproveship/ui-web` or `@buildproveship/tokens`, never copy it; depend on published `^` versions only; never weaken

@@ -31,7 +31,7 @@ This is the owner's standing rule for every project. A project's own rules may a
 
 ## Code quality (all changes)
 
-Follow `skills/releaseready-code-quality/SKILL.md` before writing code and before saying a change is done: no legacy
+Follow `skills/buildproveship-code-quality/SKILL.md` before writing code and before saying a change is done: no legacy
 or compatibility code without a named consumer; search npm, the SDK, the framework or the CLI before writing a
 helper; import shared code from `@releaseready/test-management`, TDM `dev-fixtures`, `@releaseready/config`,
 `@releaseready/ui-web` or `@releaseready/tokens`, never copy it; depend on published `^` versions only; never weaken

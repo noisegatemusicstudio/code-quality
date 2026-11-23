@@ -76,7 +76,7 @@
     "yauzl": "3.4.0"
   },
   "devDependencies": {
-    "@buildproveship/config": "^5.0.1",
+    "@buildproveship/config": "^5.1.0",
     "@types/node": "22.20.5",
     "@types/yauzl": "3.4.0",
     "markdownlint-cli2": "0.24.1",

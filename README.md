@@ -322,7 +322,7 @@ still gates any packaging. CodeQL and Sonar analyzers are not used.
   and rules are never fetched at scan time. Semgrep runs no build or install
   step; like `runAdapter` this is not a network-enforced sandbox.
 - **Rulesets**: `releaseready-authored` (starter rules in `rules/semgrep/`,
-  ruleset version `2026.11.1`, ReleaseReady licence header) is allowed for any
+  ruleset version `2026.11.1`, BuildProveShip licence header) is allowed for any
   scope. `semgrep-maintained-snapshot` is internal-only (Semgrep Rules License
   v1.0): it runs only from a pinned local snapshot and only when
   `audience: 'internal'` is set; otherwise `refusal: internal-only-ruleset`.
@@ -551,7 +551,7 @@ Licence, redistribution and hosted-use review of candidate scanners (RRDSCRUM-61
 
 `.github/workflows/quality-scan.yml` is a reusable workflow that runs this
 package's scanners on a pull request: ESLint (bundled rules), Gitleaks, Trivy
-(filesystem IaC checks), Semgrep (ReleaseReady rules in `rules/semgrep` only, no
+(filesystem IaC checks), Semgrep (BuildProveShip rules in `rules/semgrep` only, no
 registry rules), jscpd and OSV, plus ShellCheck and shfmt (`-d`, never rewrites)
 for shell scripts, Prettier (`--check` semantics, see below), actionlint and zizmor (`--offline`) for workflows, hadolint
 (Dockerfiles), tflint (Terraform, bundled ruleset only, no plugin downloads),
@@ -681,7 +681,7 @@ commit's file is used.
 ### `code-quality-results` artifact (stable portal contract)
 
 The workflow uploads the artifact `code-quality-results` with 90-day retention
-on every run (`if: !cancelled()`), so the ReleaseReady portal can pull it with a
+on every run (`if: !cancelled()`), so the BuildProveShip portal can pull it with a
 read-only token. Layout:
 
 ```text
@@ -747,7 +747,7 @@ not as clean. The run is bounded by the adapter timeout and a heap limit. Detail
 ## Running outside GitHub Actions
 
 The same CLI runs a scan without GitHub Actions, for example from the
-ReleaseReady Dev app. It is two steps. `$TOOLS` and `$OUT` are directories you
+BuildProveShip Dev app. It is two steps. `$TOOLS` and `$OUT` are directories you
 choose; `<sha>` is the full 40-character commit of this package you are running.
 
 ```sh

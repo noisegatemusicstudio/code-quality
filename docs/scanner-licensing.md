@@ -6,10 +6,10 @@ anything marked "proceed" before first redistribution.
 
 Rules used: a claim without a primary URL is `unknown`; `unknown` blocks inclusion.
 Sonar analyzers and third-party SAST rules are **not** assumed embeddable.
-"Redistribute" = ship the tool/rules/data inside the ReleaseReady product or its
-CI images. "Hosted" = run it for customers inside a ReleaseReady-operated service.
+"Redistribute" = ship the tool/rules/data inside the BuildProveShip product or its
+CI images. "Hosted" = run it for customers inside a BuildProveShip-operated service.
 The initial product model is customer-run (local / customer CI, RRDSCRUM-126),
-where ReleaseReady redistributes nothing and the customer installs the tool.
+where BuildProveShip redistributes nothing and the customer installs the tool.
 
 Versions are the latest stable found on the date above (git tags via `git ls-remote`,
 npm via the registry). Where they differ from our pin, both are shown.
@@ -85,13 +85,13 @@ Sources: dated captures (2026-11-12, 07:41 UTC) of the [Rules License](https://s
 - Violating use is unlicensed and the licences terminate automatically.
 - Semgrep invites commercial arrangements: "If you are interested in using Semgrep products for your own solutions and code analysis tools, send us an email at partnerships@semgrep.com". Use this route for the customer-run-CI and hosted questions.
 
-| Use                                                                             | Status                                                                                                                                     |
-| ------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| Scanning ReleaseReady's own repositories                                        | Permitted as internal business use, subject to the licence's other terms                                                                   |
-| Hosted customer scans                                                           | Not permitted without separate written permission from Semgrep                                                                             |
-| Shipping/copying rules into the repo or product                                 | Conflicts with the distribution restriction; no overriding notice/attribution found. Internal-only copies: check the full dated copy first |
-| Customer-run CI that downloads the rules, with ReleaseReady integrating results | Not expressly resolved by the text: unknown. Obtain Semgrep's written permission before relying on it                                      |
-| Meaning of "competing"                                                          | Not precisely defined; a customer-facing code-quality/SAST product is a clear risk and must not be assumed permitted. Legal question       |
+| Use                                                                               | Status                                                                                                                                     |
+| --------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
+| Scanning BuildProveShip's own repositories                                        | Permitted as internal business use, subject to the licence's other terms                                                                   |
+| Hosted customer scans                                                             | Not permitted without separate written permission from Semgrep                                                                             |
+| Shipping/copying rules into the repo or product                                   | Conflicts with the distribution restriction; no overriding notice/attribution found. Internal-only copies: check the full dated copy first |
+| Customer-run CI that downloads the rules, with BuildProveShip integrating results | Not expressly resolved by the text: unknown. Obtain Semgrep's written permission before relying on it                                      |
+| Meaning of "competing"                                                            | Not precisely defined; a customer-facing code-quality/SAST product is a clear risk and must not be assumed permitted. Legal question       |
 
 **Third-party Registry rules:** inherit the licences of their source repositories (verified; the summary cites Trail of Bits rules under AGPL-3.0 as an example, so copyleft can apply). No rule IDs or packs are proposed yet, so licences are unknown. Each rule and its source/version needs individual review; neither blanket approval nor blanket rejection is supported.
 
@@ -133,7 +133,7 @@ Rules: hadolint and yamllint stay separate executables invoked as processes; do 
 - Approved for the first adapters: ESLint/typescript-eslint, Gitleaks CLI, OSV-Scanner (online data), Trivy engine and checks, jscpd, Istanbul JSON import.
 - Blocked on legal/verification: bundled OSV data, Trivy DB, Semgrep LGPL packaging review and per-rule third-party review, any third-party ESLint plugin, transitive licence scan.
 - Not usable: CodeQL, Gitleaks Action, Semgrep-maintained rules. RRDSCRUM-133 (SAST engines and licensed rules) must start from our own rules or a separately licensed pack.
-- No Sonar analyzer is embeddable; ReleaseReady's own Sonar work stays under RRDPLAT-22/29.
+- No Sonar analyzer is embeddable; BuildProveShip's own Sonar work stays under RRDPLAT-22/29.
 - Re-check versions and licences at integration time; this table is a dated snapshot.
 
 ## Language-profile engines (reviewed 2026-11-12, not installed or run)

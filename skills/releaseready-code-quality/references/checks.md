@@ -1,6 +1,6 @@
 # What CI checks, and how to adopt it
 
-`releaseready-guardrails` and the shared ESLint config ship in `@releaseready/config` (one source for every repo).
+`releaseready-guardrails` and the shared ESLint config ship in `@buildproveship/config` (one source for every repo).
 Every repo runs them in `pr.yml`. Merge only when `pr.yml` is green. config and universal-appium-framework enforce
 this with GitHub branch protection (required check `checks`, up to date with `main`, no force pushes, admins
 included). The other eight repos are private on GitHub's free plan, which has no branch protection, so there a local
@@ -16,15 +16,15 @@ npx releaseready-guardrails baseline   # print allow entries for today's finding
 ```
 
 Each repo wraps the first in `npm run check:guardrails` and runs it from its check command. observability (Python)
-runs it with `npx --yes --package @releaseready/config@^2 releaseready-guardrails` next to ruff, `mypy --strict`,
+runs it with `npx --yes --package @buildproveship/config@^2 releaseready-guardrails` next to ruff, `mypy --strict`,
 vulture and pip-audit.
 
 ## Rules
 
 | Rule                              | Fails on                                                                                                                                                                                                                 | Findings                      |
 | --------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ----------------------------- |
-| `dependency-source`               | git/GitHub/SHA/tarball/URL/`file:`/`link:` specs in any package.json or lockfile; `@releaseready/*` not `^x.y.z`                                                                                                         | RR-15, TDM-12, UPF-16, FUI-04 |
-| `unpublished-internal-dependency` | `@releaseready/*` from git, a tarball, or a local or `dist/` folder through an `npm:` alias or `overrides`; a lockfile link outside the repo or a release-tarball `resolved`                                             | Nov 2026 review               |
+| `dependency-source`               | git/GitHub/SHA/tarball/URL/`file:`/`link:` specs in any package.json or lockfile; `@buildproveship/*` not `^x.y.z`                                                                                                       | RR-15, TDM-12, UPF-16, FUI-04 |
+| `unpublished-internal-dependency` | `@buildproveship/*` from git, a tarball, or a local or `dist/` folder through an `npm:` alias or `overrides`; a lockfile link outside the repo or a release-tarball `resolved`                                           | Nov 2026 review               |
 | `tsconfig-private-path`           | tsconfig/jsconfig `paths` targets in `dist/` or `node_modules`                                                                                                                                                           | RR-14, RPT-08, UPF-14         |
 | `tsconfig-not-strict`             | `strict`, `noImplicitAny`, `strictNullChecks` … set to `false`                                                                                                                                                           | standard 2                    |
 | `build-in-node-modules`           | scripts with `--prefix node_modules/…`, `cd node_modules`, `tsc -p node_modules/…`                                                                                                                                       | TDM-11, RPT-15                |
@@ -47,7 +47,7 @@ vulture and pip-audit.
 | knip                              | unused files, exports, dependencies; unlisted dependencies and binaries                                                                                                                                                  | TDM-17, RPT-19, UA2-04/05     |
 | jscpd                             | duplicated JS/TS/Python above the repo's threshold (default 3%)                                                                                                                                                          | RR-17, TM-23, UPF-15          |
 
-Shared ESLint (`@releaseready/config/eslint`), on every JS and TS file:
+Shared ESLint (`@buildproveship/config/eslint`), on every JS and TS file:
 
 | Rule                                                     | Fails on                                                              |
 | -------------------------------------------------------- | --------------------------------------------------------------------- |
@@ -64,7 +64,7 @@ goes in the repo's `releaseready-guardrails.json`, never in an inline comment:
 
 ```json
 {
-  "$schema": "./node_modules/@releaseready/config/guardrails/config.schema.json",
+  "$schema": "./node_modules/@buildproveship/config/guardrails/config.schema.json",
   "allow": [
     {
       "rule": "copied-schema-primitive",
@@ -101,8 +101,8 @@ Every repo's `AGENTS.md` and `CLAUDE.md` carry this block (with the repo's check
 
 Follow `skills/releaseready-code-quality/SKILL.md` before writing code and before saying a change is done: no legacy
 or compatibility code without a named consumer; search npm, the SDK, the framework or the CLI before writing a
-helper; import shared code from `@releaseready/test-management`, TDM `dev-fixtures`, `@releaseready/config`,
-`@releaseready/ui-web` or `@releaseready/tokens`, never copy it; depend on published `^` versions only; never weaken
+helper; import shared code from `@buildproveship/test-management`, TDM `dev-fixtures`, `@buildproveship/config`,
+`@buildproveship/ui-web` or `@buildproveship/tokens`, never copy it; depend on published `^` versions only; never weaken
 a lint rule, test or guard to go green, and give every disable comment a reason; READMEs describe today's code.
 The check command is `<command>`; it runs `npm run check:guardrails`, which `pr.yml` enforces on every PR.
 ```

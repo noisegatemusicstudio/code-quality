@@ -111,7 +111,7 @@ await test(
   async () => {
     const g = await fake(
       'gl',
-      `if (process.argv[2] === 'version') {console.log('${gitleaksVersion}');process.exit(0)}console.log('[]')`,
+      `if (process.argv.includes('version')) {console.log('${gitleaksVersion}');process.exit(0)}console.log('[]')`,
     );
     const adapter = createGitleaksAdapter({
       executable: g.path,
@@ -127,7 +127,7 @@ await test(
     // Same binary, but it reports a different version than the pin: refused.
     const old = await fake(
       'gl-old',
-      `if (process.argv[2] === 'version') {console.log('8.0.0');process.exit(0)}console.log('[]')`,
+      `if (process.argv.includes('version')) {console.log('8.0.0');process.exit(0)}console.log('[]')`,
     );
     const refused = await runAdapter(
       { ...adapter, executable: old.path, executableSha256: old.sha256 },

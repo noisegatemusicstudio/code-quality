@@ -8,7 +8,7 @@ on:
 
 permissions:
   contents: read
-  packages: read # private @releaseready/config devDependency of the scanner tooling
+  packages: read # private @buildproveship/config devDependency of the scanner tooling
 
 jobs:
   quality:

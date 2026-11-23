@@ -8,7 +8,7 @@ description: Code-quality rules for every change in any releaseready repo (Relea
 The 18 Nov 2026 review of nine repos found 191 defects (`_review/findings/<repo>.md`, IDs such as `RR-05` or `TM-06`).
 Most came from four habits: **keeping old code "just in case", writing a helper instead of using a library, copying
 code from another repo instead of importing it, and turning a check off to go green.** Each rule below names the
-findings it prevents. `releaseready-guardrails` (from `@releaseready/config`) enforces the mechanical part in every
+findings it prevents. `releaseready-guardrails` (from `@buildproveship/config`) enforces the mechanical part in every
 repo's `pr.yml`; the rest is on you.
 
 ## The rules
@@ -37,17 +37,17 @@ repo's `pr.yml`; the rest is on you.
 4. **Import shared code; never copy it.** One source for each config, constant, type, schema, fixture and doc fact.
    Shared code lives in exactly one of these places — import it, and if what you need is missing, add it there
    first (see [where shared code lives](references/shared-sources.md)):
-   - `@releaseready/test-management`: `schema/v1` (reference, revision, uuid, digest, object primitives),
+   - `@buildproveship/test-management`: `schema/v1` (reference, revision, uuid, digest, object primitives),
      `canonical/v1` (canonical JSON + digest), `identity/v1` (JWT/OIDC verifier, incl. Cognito), `sqlite/v1` (open
      helper), `contract-comparator/v1`, `gherkin-cases/v1` (case-ID derivation), and the contract types;
-   - `@releaseready/test-data-management` `dev-fixtures/v1`: seeded Dev accounts, codes and invitations;
-   - `@releaseready/config`: ESLint, Prettier, tsconfig base, Renovate preset, these guardrails;
-   - `@releaseready/ui-web` (`/v8`) and `@releaseready/tokens`: components, CSS and design tokens.
+   - `@buildproveship/test-data-management` `dev-fixtures/v1`: seeded Dev accounts, codes and invitations;
+   - `@buildproveship/config`: ESLint, Prettier, tsconfig base, Renovate preset, these guardrails;
+   - `@buildproveship/ui-web` (`/v8`) and `@buildproveship/tokens`: components, CSS and design tokens.
      Two copies of the same thing inside one repo are also a finding: extract one module. _(TM-06, TM-07, TM-13,
      TM-14, TM-15, TM-16, TM-17, TM-18, TM-20, TM-23, TDM-05, TDM-06, TDM-07, TDM-13, TDM-14, TDM-21, TDM-22, RPT-01,
      RPT-05, RPT-07, RPT-10, RR-05, RR-06, RR-13, RR-16, RR-17, UPF-09, UPF-10, UPF-15, UAF-06, UAF-07, UAF-08, UA2-08,
      UA2-09, UA2-19, UA2-21, FUI-11, FUI-12, FUI-13, FUI-16, OBS-04, OBS-05, OBS-06, OBS-07)_
-5. **Depend on published `^` versions only.** Internal packages come from GitHub Packages as `"@releaseready/x":
+5. **Depend on published `^` versions only.** Internal packages come from GitHub Packages as `"@buildproveship/x":
 "^1.2.0"`. No git URLs or SHA pins, no tarballs (committed or remote), no `file:`/`link:` deps, no tsconfig
    `paths` into `dist/` or `node_modules`, no scripts that build a dependency inside `node_modules`. If a consumer
    needs something unexported, export it from the package and release it. Every import is a declared dependency.
@@ -74,7 +74,7 @@ repo's `pr.yml`; the rest is on you.
 9. **Every finding gets a permanent guard.** When a review, scanner (semgrep, ruff, ESLint, a former SonarCloud run),
    CI run or person finds a defect, fixing the one instance is not done. In the same PR add the cheapest guard that
    makes the whole class fail next time, in this order: a lint or guardrail rule (`guardrails/rules.js` in
-   `@releaseready/config`, ruff or ESLint config), a test that fails without the fix, then a row in the table below.
+   `@buildproveship/config`, ruff or ESLint config), a test that fails without the fix, then a row in the table below.
    Say which guard you added in the PR. Never dismiss a finding without a reason in the scanner or an allowlist entry.
    Patterns already known: no `assert` for runtime checks (raise); no literal `/tmp` or `/` as a temp or working
    directory (`mkdtemp`, `/var/empty`); no regex whose lazy or nested quantifiers can backtrack on tool or user
@@ -98,41 +98,44 @@ repo's `pr.yml`; the rest is on you.
 
 ## Smell → fix
 
-| If you are about to…                                                | Do this instead                                                                | Findings               |
-| ------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ---------------------- |
-| keep a v1 controller, reader or migration "for old data"            | delete it; nothing is in production                                            | RR-03, RR-04, TM-11/12 |
-| mark something `@deprecated` or name it `legacy…`                   | delete it and update its callers                                               | UPF-01, FUI-17         |
-| keep an export, starter or slice "someone might use"                | find the importer; none → delete                                               | TM-22, TDM-16, UA2-12  |
-| type `/^[A-Za-z0-9][A-Za-z0-9._:-]*$/`, a UUID or a 64-hex regex    | import from `@releaseready/test-management/schema/v1`                          | TM-07, TM-16, TDM-07   |
-| write `canonical()` / sort keys + sha256                            | `@releaseready/test-management/canonical/v1`                                   | TM-06, TDM-21          |
-| call `jwtVerify` / build a JWKS verifier                            | `@releaseready/test-management/identity/v1`                                    | TM-18, TDM-06          |
-| write `0.2126 * r + 0.7152 * g …` contrast maths                    | `colorjs.io` (`Color.contrast(…, "WCAG21")`)                                   | RPT-11                 |
-| copy seeded Dev emails or codes into constants                      | `@releaseready/test-data-management/dev-fixtures/v1`                           | TDM-14, RPT-05         |
-| copy a component, its CSS or a token value                          | `@releaseready/ui-web/v8`, `@releaseready/tokens`                              | RR-05, RR-06, FUI-11   |
-| copy a test tree "to mirror" another repo                           | one repo owns it; the other imports or runs it                                 | RPT-01                 |
-| pin `"x": "github:org/x#abc123"` or commit a `.tgz`                 | publish the package, depend on `^x.y.z`                                        | RR-15, TDM-12, UPF-16  |
-| alias `paths` to `node_modules/x/dist/...`                          | export the subpath from the package and import it                              | RR-14, RPT-08          |
-| run `npm run build --prefix node_modules/x`                         | consume the published build                                                    | TDM-11, RPT-15         |
-| write `argv[4]` or a flag-parsing loop                              | `node:util.parseArgs`                                                          | RR-10, UAF-05, UA2-02  |
-| write a retry/sleep loop in a Playwright test                       | `expect.poll`, `expect(...).toPass()`, web-first assertions                    | UPF-07                 |
-| hand-write a `fetch` client with response checks                    | generated OpenAPI client/types, Octokit or `gh`, or Ajv on the shared schema   | RR-07, RR-09, RPT-12   |
-| hand-write an XML, ZIP, YAML or CSV parser                          | a maintained library (`fast-xml-parser`, `yauzl`, `yaml`, `csv-parse`)         | TM-10, RR-08, UA2-14   |
-| validate a body with `typeof` chains                                | Ajv with the schema you already have                                           | TDM-08, TM-09          |
-| new `new Ajv({ strict: false })`                                    | the repo's one shared strict Ajv instance                                      | TM-05                  |
-| add `// eslint-disable-next-line` or `@ts-expect-error` to go green | fix the code; if truly needed, name the rule and add `-- reason`               | UPF-02, RR-12          |
-| set a rule to `"off"` or narrow the lint/format glob                | fix the code; a repo-level override needs a comment saying why                 | UPF-03, UA2-07, RR-11  |
-| use `any` or `as unknown as`                                        | a real type, a type guard or a schema-derived type                             | RR-12, UPF-18, RPT-21  |
-| `except Exception:` / `catch {}` that hides bugs                    | catch the specific error you expect and let the rest fail                      | OBS-09                 |
-| add `injectedFailure` / test knobs to a production module           | inject through the test, not the shipped API                                   | UPF-11                 |
-| write a second copy of a constant, limit or config                  | import the one definition; generate both outputs from one source               | UPF-10, UAF-06, OBS-06 |
-| add a README section "Status — 15 Nov 2026" or a ticket diary       | `CHANGELOG.md` / `docs/history/`; README says what the code does now           | TDM-20, RPT-17, TM-26  |
-| copy versions from package.json into docs                           | link to package.json                                                           | UA2-20, UAF-12         |
-| fix one finding and stop                                            | add a lint/guardrail rule, test or skill row for the whole class               | rule 9                 |
-| write `assert cond, msg` as a runtime check in Python               | `if not cond: raise SomeError(msg)`                                            | SonarCloud             |
-| write `"/tmp"` as a temp dir or cwd                                 | `tempfile.mkdtemp()` / `fs.mkdtemp()`, or `/var/empty` when nothing is written | SonarCloud             |
-| write a regex with `.+?` or nested quantifiers on tool output       | split and parse the text                                                       | SonarCloud             |
-| call `.sort()` on strings with no comparator                        | `.sort((a, b) => a.localeCompare(b))`                                          | SonarCloud             |
-| say "done" after only the tests you touched                         | run the repo's full check command, incl. `check:guardrails`                    | TM-01, UPF-20          |
+| If you are about to…                                                       | Do this instead                                                                                                                                                                                   | Findings                     |
+| -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------- |
+| keep a v1 controller, reader or migration "for old data"                   | delete it; nothing is in production                                                                                                                                                               | RR-03, RR-04, TM-11/12       |
+| mark something `@deprecated` or name it `legacy…`                          | delete it and update its callers                                                                                                                                                                  | UPF-01, FUI-17               |
+| keep an export, starter or slice "someone might use"                       | find the importer; none → delete                                                                                                                                                                  | TM-22, TDM-16, UA2-12        |
+| type `/^[A-Za-z0-9][A-Za-z0-9._:-]*$/`, a UUID or a 64-hex regex           | import from `@buildproveship/test-management/schema/v1`                                                                                                                                           | TM-07, TM-16, TDM-07         |
+| write `canonical()` / sort keys + sha256                                   | `@buildproveship/test-management/canonical/v1`                                                                                                                                                    | TM-06, TDM-21                |
+| call `jwtVerify` / build a JWKS verifier                                   | `@buildproveship/test-management/identity/v1`                                                                                                                                                     | TM-18, TDM-06                |
+| write `0.2126 * r + 0.7152 * g …` contrast maths                           | `colorjs.io` (`Color.contrast(…, "WCAG21")`)                                                                                                                                                      | RPT-11                       |
+| copy seeded Dev emails or codes into constants                             | `@buildproveship/test-data-management/dev-fixtures/v1`                                                                                                                                            | TDM-14, RPT-05               |
+| copy a component, its CSS or a token value                                 | `@buildproveship/ui-web/v8`, `@buildproveship/tokens`                                                                                                                                             | RR-05, RR-06, FUI-11         |
+| copy a test tree "to mirror" another repo                                  | one repo owns it; the other imports or runs it                                                                                                                                                    | RPT-01                       |
+| pin `"x": "github:org/x#abc123"` or commit a `.tgz`                        | publish the package, depend on `^x.y.z`                                                                                                                                                           | RR-15, TDM-12, UPF-16        |
+| alias `paths` to `node_modules/x/dist/...`                                 | export the subpath from the package and import it                                                                                                                                                 | RR-14, RPT-08                |
+| run `npm run build --prefix node_modules/x`                                | consume the published build                                                                                                                                                                       | TDM-11, RPT-15               |
+| write `argv[4]` or a flag-parsing loop                                     | `node:util.parseArgs`                                                                                                                                                                             | RR-10, UAF-05, UA2-02        |
+| write a retry/sleep loop in a Playwright test                              | `expect.poll`, `expect(...).toPass()`, web-first assertions                                                                                                                                       | UPF-07                       |
+| hand-write a `fetch` client with response checks                           | generated OpenAPI client/types, Octokit or `gh`, or Ajv on the shared schema                                                                                                                      | RR-07, RR-09, RPT-12         |
+| hand-write an XML, ZIP, YAML or CSV parser                                 | a maintained library (`fast-xml-parser`, `yauzl`, `yaml`, `csv-parse`)                                                                                                                            | TM-10, RR-08, UA2-14         |
+| validate a body with `typeof` chains                                       | Ajv with the schema you already have                                                                                                                                                              | TDM-08, TM-09                |
+| new `new Ajv({ strict: false })`                                           | the repo's one shared strict Ajv instance                                                                                                                                                         | TM-05                        |
+| add `// eslint-disable-next-line` or `@ts-expect-error` to go green        | fix the code; if truly needed, name the rule and add `-- reason`                                                                                                                                  | UPF-02, RR-12                |
+| set a rule to `"off"` or narrow the lint/format glob                       | fix the code; a repo-level override needs a comment saying why                                                                                                                                    | UPF-03, UA2-07, RR-11        |
+| use `any` or `as unknown as`                                               | a real type, a type guard or a schema-derived type                                                                                                                                                | RR-12, UPF-18, RPT-21        |
+| `except Exception:` / `catch {}` that hides bugs                           | catch the specific error you expect and let the rest fail                                                                                                                                         | OBS-09                       |
+| add `injectedFailure` / test knobs to a production module                  | inject through the test, not the shipped API                                                                                                                                                      | UPF-11                       |
+| write a second copy of a constant, limit or config                         | import the one definition; generate both outputs from one source                                                                                                                                  | UPF-10, UAF-06, OBS-06       |
+| add a README section "Status — 15 Nov 2026" or a ticket diary              | `CHANGELOG.md` / `docs/history/`; README says what the code does now                                                                                                                              | TDM-20, RPT-17, TM-26        |
+| copy versions from package.json into docs                                  | link to package.json                                                                                                                                                                              | UA2-20, UAF-12               |
+| fix one finding and stop                                                   | add a lint/guardrail rule, test or skill row for the whole class                                                                                                                                  | rule 9                       |
+| write `assert cond, msg` as a runtime check in Python                      | `if not cond: raise SomeError(msg)`                                                                                                                                                               | SonarCloud                   |
+| write `"/tmp"` as a temp dir or cwd                                        | `tempfile.mkdtemp()` / `fs.mkdtemp()`, or `/var/empty` when nothing is written                                                                                                                    | SonarCloud                   |
+| write a regex with `.+?` or nested quantifiers on tool output              | split and parse the text                                                                                                                                                                          | SonarCloud                   |
+| call `.sort()` on strings with no comparator                               | `.sort((a, b) => a.localeCompare(b))`                                                                                                                                                             | SonarCloud                   |
+| add `eslint-disable` or `@ts-expect-error` with no reason, or `@ts-ignore` | fix the code; name the rule and add `-- why` (ESLint) / 10+ characters after `@ts-expect-error`; replace `@ts-ignore`                                                                             | Nov 2026 audit, RRDSCRUM-436 |
+| read `process.argv[2]` by index                                            | `node:util` `parseArgs` (or commander / yargs)                                                                                                                                                    | Nov 2026 audit, RRDSCRUM-436 |
+| say "done" after only the tests you touched                                | run the repo's full check command, incl. `check:guardrails`                                                                                                                                       | TM-01, UPF-20                |
+| link, cite or build from a design copy, an old Library or memory           | start from the Design Library hub (`GJXHyxKvFEkyhFgqt9V6D3`) and its area pages; the hub wins over code, repo records and Confluence. A repo's `check:guardrails` fails on the retired Library ID | RRDSCRUM-484                 |
 
 ## What CI enforces
 
@@ -141,7 +144,7 @@ tsconfig `paths` into `dist/` or `node_modules`; `strict` turned off; scripts th
 re-declared schema-primitive regexes, hand-written WCAG luminance, local `canonical()` digests, local JWT
 verification; `@deprecated`/legacy/compatibility markers; skipped tests; ESLint rules turned off without a comment;
 dated or ticket headings in READMEs; a tracked `.DS_Store`; tracked `dist/` or `build/` output; a non-generated source file over 1,000 lines;
-`@releaseready/*` installed through an `npm:` alias, an override or a lockfile link or tarball from outside the registry; this skill drifting from the published copy; knip findings; jscpd duplication
+`@buildproveship/*` installed through an `npm:` alias, an override or a lockfile link or tarball from outside the registry; this skill drifting from the published copy; knip findings; jscpd duplication
 over the repo's threshold. The shared ESLint config fails on disable comments without `-- reason`, `@ts-ignore`,
 `@ts-expect-error` without a description, and focused (`.only`) tests. Details and the allowlist format:
 [references/checks.md](references/checks.md).

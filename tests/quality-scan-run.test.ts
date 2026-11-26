@@ -360,17 +360,17 @@ await test('reusable workflow provisions a sha256-verified Git >= 2.47 before th
   );
 });
 
-await test('dogfood workflow calls the reusable one in advisory mode on pull requests and main, never on drafts or branch pushes', async () => {
+await test('dogfood workflow calls the reusable one in advisory mode on main and on demand, never on pull requests or branch pushes', async () => {
   const text = await readFile(
     new URL('quality.yml', workflowDirectory),
     'utf8',
   );
-  // RRDPLAT-114: one scan per PR commit. A push to a PR branch used to start a second scan next to pull_request.
+  // RRDPLAT-114: the scan is advisory, so it costs nothing on pull requests; it runs on main and by manual dispatch.
   assert.match(
     text,
-    /^on:\n {2}push:\n {4}branches: \[main\]\n {2}pull_request:\n {4}types: \[opened, synchronize, reopened, ready_for_review\]\n/m,
+    /^on:\n {2}push:\n {4}branches: \[main\]\n {2}workflow_dispatch:\n/m,
   );
-  assert.match(text, /pull_request\.draft/);
+  assert.doesNotMatch(text, /^ {2}pull_request:/m);
   assert.match(text, /uses: \.\/\.github\/workflows\/quality-scan\.yml/);
   assert.match(text, /enforce: false/);
   assert.match(text, /code-quality-ref: \$\{\{ github\.sha \}\}/);

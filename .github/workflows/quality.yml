@@ -1,13 +1,14 @@
 name: Quality
 
 # Owner-approved exception to the hosted-CI pause (Jira RRDPLAT-24): the quality
-# scan runs on pull requests and on main. It no longer runs on every branch push: a push to a PR branch started a
+# scan runs on main and on demand only. It is advisory (enforce: false), so it does not run on pull requests
+# (RRDPLAT-114, Actions budget).
+# Formerly: It no longer runs on every branch push: a push to a PR branch started a
 # second scan next to the pull_request one, and drafts are skipped (RRDPLAT-114, Actions budget).
 on:
   push:
     branches: [main]
-  pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -15,7 +16,6 @@ permissions:
 
 jobs:
   quality:
-    if: ${{ github.event_name != 'pull_request' || !github.event.pull_request.draft }}
     # Dogfood: advisory mode, scanner tooling built from the commit under test.
     uses: ./.github/workflows/quality-scan.yml
     with:

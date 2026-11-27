@@ -198,12 +198,12 @@ function xmlDecode(text: string): string {
 }
 function xmlAttributes(source: string): Partial<Record<string, string>> {
   const out: Partial<Record<string, string>> = {};
-  for (const m of source.matchAll(/([A-Za-z_:][\w:.-]*)="([^"]*)"/g))
+  for (const m of source.matchAll(/([^\s="<>/]+)="([^"]*)"/g))
     out[m[1]] = xmlDecode(m[2]);
   return out;
 }
 const checkstyleSeverities = new Set(['error', 'warning', 'info']);
-const attributeList = String.raw`((?:\s+[A-Za-z_:][\w:.-]*="[^"]*")*)`;
+const attributeList = String.raw`((?:\s+[^\s="<>/]+="[^"]*")*)`;
 const checkstyleTokens = new RegExp(
   String.raw`<file${attributeList}\s*(/?)>|<error${attributeList}\s*/>|</file>`,
   'g',

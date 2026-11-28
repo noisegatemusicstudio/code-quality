@@ -7,6 +7,7 @@ Scope: Proves the ShellCheck, shfmt, actionlint and zizmor parsers, argument con
 import assert from 'node:assert/strict';
 import { createHash } from 'node:crypto';
 import { chmod, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -485,4 +486,5 @@ await test('pins: release assets agree with the engine pins and official version
 
 await test('cleanup', async () => {
   await rm(dir, { recursive: true, force: true });
+  assert.equal(existsSync(dir), false, 'fixture folder removed');
 });

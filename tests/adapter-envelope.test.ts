@@ -13,6 +13,7 @@ import {
   rm,
   writeFile,
 } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
@@ -571,4 +572,5 @@ await test(
 
 await test('cleanup of test fixtures', async () => {
   await rm(dir, { recursive: true, force: true });
+  assert.equal(existsSync(dir), false, 'fixture folder removed');
 });
